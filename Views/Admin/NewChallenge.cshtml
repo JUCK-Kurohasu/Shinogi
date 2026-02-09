@@ -1,0 +1,56 @@
+@model Shinogi.ViewModels.ChallengeEditViewModel
+<section>
+    <h1>New Challenge</h1>
+    <form method="post" asp-action="CreateChallenge" class="form form-wide">
+        <label>Name<input name="Name" value="@Model.Name" required /></label>
+        <label>Category
+            <select name="Category" required>
+                <option value="">-- 選択 --</option>
+                @foreach (var cat in Model.Categories)
+                {
+                    <option value="@cat">@cat</option>
+                }
+            </select>
+        </label>
+        <label>Difficulty
+            <select name="Difficulty">
+                <option value="">-- 選択 --</option>
+                @foreach (var diff in Model.Difficulties)
+                {
+                    <option value="@diff">@diff</option>
+                }
+            </select>
+        </label>
+        <label>Description<textarea name="Description" rows="3">@Model.Description</textarea></label>
+        <label>Value Initial<input name="ValueInitial" type="number" value="@Model.ValueInitial" /></label>
+        <label>Value Minimum<input name="ValueMinimum" type="number" value="@Model.ValueMinimum" /></label>
+        <label>Decay<input name="Decay" type="number" value="@Model.Decay" /></label>
+        <label>Function
+            <select name="Function">
+                <option value="linear" selected>Linear</option>
+                <option value="log">Log</option>
+                <option value="exp">Exp</option>
+            </select>
+        </label>
+        <label>Logic
+            <select name="Logic">
+                <option value="any" selected>Any</option>
+                <option value="all">All</option>
+                <option value="teamconsensus">Team Consensus</option>
+            </select>
+        </label>
+        <label>Max Attempts (optional)<input name="MaxAttempts" type="number" /></label>
+        <label>出題時刻 (空欄で即時公開)
+            <input type="datetime-local" name="ReleaseAt" />
+        </label>
+        <div style="display:flex; align-items:center; gap:10px;">
+            <label class="toggle-switch" title="非公開">
+                <input name="Published" type="checkbox" value="true" />
+                <span class="toggle-slider"></span>
+            </label>
+            <span style="color:var(--primary-muted); font-size:14px;">Published</span>
+        </div>
+        <button type="submit">Create</button>
+    </form>
+    <p style="margin-top:16px;"><a asp-action="Challenges">&larr; Back</a></p>
+</section>

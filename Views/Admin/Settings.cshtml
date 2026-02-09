@@ -1,0 +1,134 @@
+@model Shinogi.ViewModels.CtfSettingsViewModel
+<section>
+    <h1>Admin</h1>
+    <div class="tab-nav">
+        <a asp-action="Challenges">Challenges</a>
+        <a asp-action="Users">Users</a>
+        <a asp-action="Teams">Teams</a>
+        <a asp-action="Settings" class="active">Settings</a>
+        <a asp-action="Categories">Categories</a>
+        <a asp-action="Difficulties">Difficulties</a>
+    </div>
+
+    <form method="post" asp-action="UpdateSettings" class="form form-wide">
+        <h3 style="margin:0; color:var(--text-white);">CTF 開催設定</h3>
+        <label>
+            開催開始時刻
+            <input type="datetime-local" name="EventStart" value="@Model.EventStart" />
+        </label>
+        <label>
+            開催終了時刻
+            <input type="datetime-local" name="EventEnd" value="@Model.EventEnd" />
+        </label>
+        <p style="font-size:12px; color:var(--primary-muted); margin:0;">
+            設定するとイベント期間外はチャレンジ一覧やフラグ提出が制限されます。空欄で制限なし。
+        </p>
+
+        <h3 style="margin:24px 0 8px; color:var(--text-white);">テーマプリセット</h3>
+        <p style="font-size:12px; color:var(--primary-muted); margin:0 0 8px;">
+            サイト全体のカラーテーマと背景アニメーションを選択できます。
+        </p>
+        <input type="hidden" name="ThemePreset" id="themePresetInput" value="@Model.ThemePreset" />
+        <div class="theme-presets" id="themePresetGrid">
+            <!-- JS で動的に生成 -->
+        </div>
+
+        <button type="submit">保存</button>
+    </form>
+
+    <div style="margin-top:48px; border-top:1px solid var(--border); padding-top:24px;">
+        <h2 style="color:var(--text-white); margin-top:0;">データリセット</h2>
+        <p style="font-size:13px; color:var(--primary-muted); margin-bottom:16px;">
+            選択した項目をリセットします。<strong>Adminユーザーは削除されません。</strong><br />
+            提出（Submission）データは常にリセットされます。
+        </p>
+        <form method="post" asp-action="ResetData" class="form form-wide" onsubmit="return confirm('本当にリセットしますか？この操作は元に戻せません。')">
+            <label style="flex-direction:row; align-items:center; gap:8px;">
+                <input type="checkbox" name="resetChallenges" value="true" />
+                チャレンジ・フラグ・配布ファイルを削除
+            </label>
+            <label style="flex-direction:row; align-items:center; gap:8px;">
+                <input type="checkbox" name="resetTeams" value="true" />
+                チーム・メンバーを削除
+            </label>
+            <label style="flex-direction:row; align-items:center; gap:8px;">
+                <input type="checkbox" name="resetUsers" value="true" />
+                ユーザーを削除（Admin以外）
+            </label>
+            <p style="font-size:12px; color:var(--primary-muted); margin:4px 0 0;">
+                <code>SHINOGI_SEED_DATA=true</code> の場合、リセット後にアプリを再起動するとテストデータが再生成されます。
+            </p>
+            <button type="submit" class="btn-danger">リセット実行</button>
+        </form>
+    </div>
+</section>
+
+@section Scripts {
+<script>
+(function() {
+    var presets = window.THEME_PRESETS;
+    if (!presets) return;
+
+    var currentPreset = "@Model.ThemePreset" || "purple-network";
+    var grid = document.getElementById("themePresetGrid");
+    var hiddenInput = document.getElementById("themePresetInput");
+
+    var ids = Object.keys(presets);
+    ids.forEach(function(id) {
+        var p = presets[id];
+        var card = document.createElement("label");
+        card.className = "theme-preview-card" + (id === currentPreset ? " selected" : "");
+        card.style.background = p.surface;
+        card.style.borderColor = id === currentPreset ? p.primary : p.border;
+
+        var radio = document.createElement("input");
+        radio.type = "radio";
+        radio.name = "themePresetRadio";
+        radio.value = id;
+        radio.checked = id === currentPreset;
+
+        var swatch = document.createElement("div");
+        swatch.className = "theme-swatch";
+        swatch.style.background = p.primary;
+
+        var name = document.createElement("div");
+        name.className = "theme-name";
+        name.textContent = p.name;
+        name.style.color = p.textWhite;
+
+        var animLabel = document.createElement("div");
+        animLabel.style.fontSize = "11px";
+        animLabel.style.color = p.primaryMuted;
+        animLabel.style.marginTop = "4px";
+        animLabel.textContent = p.animation;
+
+        card.appendChild(radio);
+        card.appendChild(swatch);
+        card.appendChild(name);
+        card.appendChild(animLabel);
+
+        card.addEventListener("click", function() {
+            // 全カードのselectedを解除
+            grid.querySelectorAll(".theme-preview-card").forEach(function(c) {
+                c.classList.remove("selected");
+                var preset = presets[c.querySelector("input").value];
+                if (preset) c.style.borderColor = preset.border;
+            });
+            card.classList.add("selected");
+            card.style.borderColor = p.primary;
+            radio.checked = true;
+            hiddenInput.value = id;
+
+            // ライブプレビュー
+            window.applyTheme(id);
+            var animType = window.getThemeAnimation(id);
+            if (window.initBgAnimation) {
+                window.initBgAnimation(animType, id);
+            }
+        });
+
+        grid.appendChild(card);
+    });
+})();
+</script>
+}

@@ -1,0 +1,110 @@
+<section>
+    <h1>API Endpoint</h1>
+    <div class="card" style="max-width:720px;">
+        <p style="color:var(--primary-muted);">
+            本プラットフォームは REST API を提供しています。JWT 認証による個人 API と、チームトークンによるチーム API の2種類があります。
+        </p>
+    </div>
+
+    <h2 style="margin-top:32px;">JWT 認証 API</h2>
+    <p style="color:var(--primary-muted);">Bearer トークンを <code style="color:var(--primary-hover);">Authorization</code> ヘッダーに付与してリクエストします。</p>
+    <table class="table" style="max-width:720px;">
+        <thead><tr><th>Method</th><th>Endpoint</th><th>説明</th><th>認証</th></tr></thead>
+        <tbody>
+            <tr>
+                <td><span class="pill" style="background:rgba(34,197,94,0.2); color:#86EFAC; border-color:rgba(34,197,94,0.3);">POST</span></td>
+                <td><code>/api/v1/auth/register</code></td>
+                <td>ユーザー登録</td>
+                <td>不要</td>
+            </tr>
+            <tr>
+                <td><span class="pill" style="background:rgba(34,197,94,0.2); color:#86EFAC; border-color:rgba(34,197,94,0.3);">POST</span></td>
+                <td><code>/api/v1/auth/login</code></td>
+                <td>ログイン（JWT 取得）</td>
+                <td>不要</td>
+            </tr>
+            <tr>
+                <td><span class="pill" style="background:rgba(96,165,250,0.2); color:#93C5FD; border-color:rgba(96,165,250,0.3);">GET</span></td>
+                <td><code>/api/v1/challenges</code></td>
+                <td>チャレンジ一覧</td>
+                <td>不要</td>
+            </tr>
+            <tr>
+                <td><span class="pill" style="background:rgba(34,197,94,0.2); color:#86EFAC; border-color:rgba(34,197,94,0.3);">POST</span></td>
+                <td><code>/api/v1/challenges</code></td>
+                <td>チャレンジ作成</td>
+                <td>Admin</td>
+            </tr>
+            <tr>
+                <td><span class="pill" style="background:rgba(34,197,94,0.2); color:#86EFAC; border-color:rgba(34,197,94,0.3);">POST</span></td>
+                <td><code>/api/v1/challenges/{id}/flags</code></td>
+                <td>フラグ追加</td>
+                <td>Admin</td>
+            </tr>
+            <tr>
+                <td><span class="pill" style="background:rgba(34,197,94,0.2); color:#86EFAC; border-color:rgba(34,197,94,0.3);">POST</span></td>
+                <td><code>/api/v1/challenges/{id}/submit</code></td>
+                <td>フラグ提出</td>
+                <td>Bearer</td>
+            </tr>
+            <tr>
+                <td><span class="pill" style="background:rgba(96,165,250,0.2); color:#93C5FD; border-color:rgba(96,165,250,0.3);">GET</span></td>
+                <td><code>/api/v1/scoreboard</code></td>
+                <td>スコアボード</td>
+                <td>不要</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2 style="margin-top:32px;">チームトークン API</h2>
+    <p style="color:var(--primary-muted);">
+        チームの UUID トークンを <code style="color:var(--primary-hover);">X-Team-Token</code> ヘッダーに付与してリクエストします。<br/>
+        トークンはチーム設定画面で確認できます。AI エージェントからの利用を想定しています。
+    </p>
+    <table class="table" style="max-width:720px;">
+        <thead><tr><th>Method</th><th>Endpoint</th><th>説明</th></tr></thead>
+        <tbody>
+            <tr>
+                <td><span class="pill" style="background:rgba(96,165,250,0.2); color:#93C5FD; border-color:rgba(96,165,250,0.3);">GET</span></td>
+                <td><code>/api/v1/team/info</code></td>
+                <td>チーム情報・メンバー一覧</td>
+            </tr>
+            <tr>
+                <td><span class="pill" style="background:rgba(96,165,250,0.2); color:#93C5FD; border-color:rgba(96,165,250,0.3);">GET</span></td>
+                <td><code>/api/v1/team/challenges</code></td>
+                <td>公開中チャレンジ一覧</td>
+            </tr>
+            <tr>
+                <td><span class="pill" style="background:rgba(34,197,94,0.2); color:#86EFAC; border-color:rgba(34,197,94,0.3);">POST</span></td>
+                <td><code>/api/v1/team/challenges/{id}/submit</code></td>
+                <td>フラグ提出（AI ロールのメンバー ID で記録）</td>
+            </tr>
+            <tr>
+                <td><span class="pill" style="background:rgba(96,165,250,0.2); color:#93C5FD; border-color:rgba(96,165,250,0.3);">GET</span></td>
+                <td><code>/api/v1/team/challenges/{id}/files</code></td>
+                <td>配布ファイルダウンロード（準備中）</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2 style="margin-top:32px;">リクエスト例</h2>
+    <div class="card" style="max-width:720px;">
+        <h3 style="color:var(--primary-hover); margin-top:0;">チームトークン認証でフラグ提出</h3>
+        <pre style="background:var(--surface-input); border:1px solid var(--border); border-radius:6px; padding:16px; color:var(--primary-muted); overflow-x:auto; font-size:13px; line-height:1.6;"><code>curl -X POST http://localhost:5299/api/v1/team/challenges/{challenge-id}/submit \
+  -H "Content-Type: application/json" \
+  -H "X-Team-Token: your-team-token-uuid" \
+  -d '{"flag": "flag{example}"}'</code></pre>
+
+        <h3 style="color:var(--primary-hover);">レスポンス</h3>
+        <pre style="background:var(--surface-input); border:1px solid var(--border); border-radius:6px; padding:16px; color:var(--primary-muted); overflow-x:auto; font-size:13px; line-height:1.6;"><code>// 正解
+{"status": "correct", "value": 450}
+
+// 不正解
+{"status": "incorrect"}</code></pre>
+
+        <h3 style="color:var(--primary-hover);">JWT ログイン</h3>
+        <pre style="background:var(--surface-input); border:1px solid var(--border); border-radius:6px; padding:16px; color:var(--primary-muted); overflow-x:auto; font-size:13px; line-height:1.6;"><code>curl -X POST http://localhost:5299/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email": "user@example.com", "password": "yourpassword"}'</code></pre>
+    </div>
+</section>

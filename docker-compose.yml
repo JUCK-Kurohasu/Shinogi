@@ -1,0 +1,27 @@
+services:
+  db:
+    image: postgres:16
+    container_name: shinogi-postgres
+    environment:
+      POSTGRES_USER: ctfd
+      POSTGRES_PASSWORD: ctfd
+      POSTGRES_DB: ctfd
+    ports:
+      - "5432:5432"
+    volumes:
+      - shinogi_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ctfd -d ctfd"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: shinogi-mailhog
+    ports:
+      - "1025:1025"   # SMTP
+      - "8025:8025"   # Web UI（受信メール閲覧用）
+
+volumes:
+  shinogi_pgdata:

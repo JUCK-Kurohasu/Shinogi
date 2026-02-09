@@ -1,0 +1,110 @@
+@model Shinogi.ViewModels.ScoreboardViewModel
+<section>
+    <h1>Scoreboard</h1>
+
+    @if (Model.TeamTimelines.Count > 0)
+    {
+        <div style="background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:20px; margin-bottom:24px;">
+            <h3 style="margin:0 0 12px; color:var(--text-white); font-size:16px;">上位5チーム スコア推移</h3>
+            <div style="position:relative; height:350px;">
+                <canvas id="scoreChart"></canvas>
+            </div>
+        </div>
+    }
+
+    <table class="table">
+        <thead>
+            <tr><th>#</th><th>Player</th><th>Team</th><th>Score</th></tr>
+        </thead>
+        <tbody>
+        @if (Model.Entries.Count == 0)
+        {
+            <tr><td colspan="4" class="coming-soon">まだ提出がありません。</td></tr>
+        }
+        else
+        {
+            var rank = 1;
+            foreach (var item in Model.Entries)
+            {
+                <tr>
+                    <td>@rank</td>
+                    <td>@item.DisplayName</td>
+                    <td>@(string.IsNullOrWhiteSpace(item.TeamName) ? "-" : item.TeamName)</td>
+                    <td><strong>@item.Score</strong></td>
+                </tr>
+                rank++;
+            }
+        }
+        </tbody>
+    </table>
+</section>
+
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+    <script>
+    (function() {
+        var timelines = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.TeamTimelines));
+        var teamNames = Object.keys(timelines);
+        if (teamNames.length === 0) return;
+
+        // テーマカラーからChart.jsパレットを生成
+        var cs = getComputedStyle(document.documentElement);
+        var primary = cs.getPropertyValue("--primary").trim() || "#855CF9";
+        var primaryHover = cs.getPropertyValue("--primary-hover").trim() || "#A78BFA";
+        var primaryMuted = cs.getPropertyValue("--primary-muted").trim() || "#C4B5FD";
+        var tableHeader = cs.getPropertyValue("--table-header").trim() || "#6D28D9";
+
+        var palette = [
+            primary, primaryHover, primaryMuted, tableHeader,
+            "#F472B6","#34D399","#FBBF24","#60A5FA",
+            "#FB923C","#E879F9","#22D3EE","#A3E635"
+        ];
+
+        var datasets = teamNames.map(function(name, i) {
+            var points = timelines[name];
+            return {
+                label: name,
+                data: points.map(function(p) { return { x: p.time || p.Time, y: p.score || p.Score }; }),
+                borderColor: palette[i % palette.length],
+                backgroundColor: palette[i % palette.length] + "33",
+                borderWidth: 2,
+                pointRadius: 3,
+                tension: 0.3,
+                fill: false
+            };
+        });
+
+        var axisColor = primaryMuted;
+        var gridColor = "rgba(" + cs.getPropertyValue("--primary-rgb").trim() + ",0.1)";
+
+        var ctx = document.getElementById("scoreChart").getContext("2d");
+        new Chart(ctx, {
+            type: "line",
+            data: { datasets: datasets },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: {
+                        type: "time",
+                        time: { tooltipFormat: "yyyy/MM/dd HH:mm" },
+                        title: { display: true, text: "時刻", color: axisColor },
+                        ticks: { color: axisColor },
+                        grid: { color: gridColor }
+                    },
+                    y: {
+                        beginAtZero: true,
+                        title: { display: true, text: "累積スコア", color: axisColor },
+                        ticks: { color: axisColor },
+                        grid: { color: gridColor }
+                    }
+                },
+                plugins: {
+                    legend: { labels: { color: cs.getPropertyValue("--text-white").trim() || "#FFFFFF" } }
+                }
+            }
+        });
+    })();
+    </script>
+}

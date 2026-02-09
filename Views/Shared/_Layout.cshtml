@@ -1,0 +1,66 @@
+@using Microsoft.EntityFrameworkCore
+@inject Shinogi.Data.CtfdDbContext DbContext
+@{
+    var settings = await DbContext.CtfSettings.FirstOrDefaultAsync();
+    var themePreset = settings != null && !string.IsNullOrWhiteSpace(settings.ThemePreset) ? settings.ThemePreset : "purple-network";
+}
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Shinogi</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="~/css/site.css" />
+</head>
+<body data-theme="@themePreset">
+    <script src="~/js/theme.js"></script>
+    <canvas id="bg-canvas"></canvas>
+    <header class="topbar">
+        <div class="brand">Shinogi</div>
+        <nav>
+            <a asp-controller="Home" asp-action="Index">Home</a>
+            <a asp-controller="Home" asp-action="About">About</a>
+            <a asp-controller="Challenges" asp-action="Index">Challenges</a>
+            <a asp-controller="Home" asp-action="Scoreboard">Scoreboard</a>
+            <a asp-controller="Home" asp-action="Endpoint">Endpoint</a>
+            @if (User.Identity != null && User.Identity.IsAuthenticated)
+            {
+                <a asp-controller="Profile" asp-action="Index">Profile</a>
+                <a asp-controller="Profile" asp-action="Team">Team</a>
+                <a asp-controller="Profile" asp-action="Settings">Settings</a>
+                @if (User.IsInRole("Admins"))
+                {
+                    <a asp-controller="Admin" asp-action="Challenges">Admin</a>
+                }
+                <a asp-controller="Account" asp-action="Logout">Logout</a>
+            }
+            else
+            {
+                <a asp-controller="Account" asp-action="Login">Login</a>
+                <a asp-controller="Account" asp-action="Register">Register</a>
+            }
+        </nav>
+    </header>
+    <main class="container">
+        @if (TempData["Error"] != null)
+        {
+            <div class="alert-error">@TempData["Error"]</div>
+        }
+        @if (TempData["Success"] != null)
+        {
+            <div class="alert-success">@TempData["Success"]</div>
+        }
+        @if (TempData["Info"] != null)
+        {
+            <div class="alert-success">@TempData["Info"]</div>
+        }
+        @RenderBody()
+    </main>
+    <footer class="footer">Built with F# + ASP.NET Core</footer>
+    <script src="~/js/bg-animation.js"></script>
+    @await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>

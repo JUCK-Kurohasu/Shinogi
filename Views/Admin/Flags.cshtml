@@ -1,0 +1,63 @@
+@model System.Collections.Generic.List<Shinogi.Domain.Flag>
+<section>
+    <h1>Flags</h1>
+    <p><strong>Challenge:</strong> @ViewData["ChallengeName"]</p>
+
+    <form method="post" asp-action="AddFlag" asp-route-id="@ViewData["ChallengeId"]" class="form form-wide">
+        <label>Flag<input name="Content" required /></label>
+        <div style="display:flex; align-items:center; gap:10px;">
+            <label class="toggle-switch">
+                <input name="CaseSensitive" type="checkbox" value="true" />
+                <span class="toggle-slider"></span>
+            </label>
+            <span style="color:var(--primary-muted); font-size:14px;">Case Sensitive</span>
+        </div>
+        <button type="submit">Add Flag</button>
+    </form>
+
+    <h2 style="margin-top:24px;">Stored Flags</h2>
+    <table class="table">
+        <thead><tr><th>Flag</th><th>Hash</th><th>Case Sensitive</th><th>操作</th></tr></thead>
+        <tbody>
+        @if (Model.Count == 0)
+        {
+            <tr><td colspan="4" class="coming-soon">フラグが登録されていません。</td></tr>
+        }
+        else
+        {
+            foreach (var f in Model)
+            {
+                <tr>
+                    <td>
+                        @if (!string.IsNullOrEmpty(f.Content))
+                        {
+                            <code style="font-size:13px; color:var(--text-white);">@f.Content</code>
+                        }
+                        else
+                        {
+                            <span style="font-size:12px; color:var(--primary-muted);">（移行前データ）</span>
+                        }
+                    </td>
+                    <td><code style="font-size:11px; color:var(--primary-hover);">@f.ContentHash.Substring(0, Math.Min(16, f.ContentHash.Length))...</code></td>
+                    <td>
+                        @if (f.CaseSensitive)
+                        {
+                            <span class="badge-owner">Yes</span>
+                        }
+                        else
+                        {
+                            <span class="badge-player">No</span>
+                        }
+                    </td>
+                    <td>
+                        <form method="post" asp-action="DeleteFlag" asp-route-id="@ViewData["ChallengeId"]" asp-route-flagId="@f.Id" style="display:inline;" onsubmit="return confirm('このフラグを削除しますか？')">
+                            <button type="submit" class="btn-danger" style="padding:4px 10px; font-size:12px;">Delete</button>
+                        </form>
+                    </td>
+                </tr>
+            }
+        }
+        </tbody>
+    </table>
+    <p style="margin-top:16px;"><a asp-action="Challenges">&larr; Back</a></p>
+</section>

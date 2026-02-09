@@ -1,0 +1,18 @@
+@model Shinogi.ViewModels.ProfileViewModel
+<section>
+    <h1>Profile</h1>
+    <div class="tab-nav">
+        <a asp-controller="Profile" asp-action="Index" class="active">プロフィール</a>
+        <a asp-controller="Profile" asp-action="Settings">設定</a>
+        <a asp-controller="Profile" asp-action="Team">チーム</a>
+    </div>
+    <div class="card">
+        <p><strong>Email:</strong> @Model.Email</p>
+        <p><strong>表示名:</strong> @Model.DisplayName</p>
+        <p><strong>チーム:</strong> @(string.IsNullOrWhiteSpace(Model.TeamName) ? "未所属" : Model.TeamName)</p>
+        @if (Model.IsAdmin)
+        {
+            <p><span class="badge-owner">Admin</span></p>
+        }
+    </div>
+</section>

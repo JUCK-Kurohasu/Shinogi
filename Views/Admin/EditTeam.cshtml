@@ -1,0 +1,85 @@
+@model System.Collections.Generic.List<Shinogi.ViewModels.TeamMemberViewModel>
+@{
+    var team = (Shinogi.Domain.Team)ViewData["Team"];
+    var teamToken = (string)ViewData["TeamToken"];
+    var joinPassword = (string)ViewData["JoinPassword"];
+}
+<section>
+    <h1>チーム編集: @team.Name</h1>
+
+    <div class="card" style="margin-bottom:24px;">
+        <strong>Team Token:</strong>
+        <div class="token-display">@teamToken</div>
+    </div>
+
+    <div class="card" style="margin-bottom:24px;">
+        <h2 style="margin-top:0;">参加パスワード</h2>
+        <form method="post" asp-action="UpdateTeamJoinPassword" class="form" style="display:flex; flex-direction:row; gap:8px; align-items:flex-end;">
+            <input type="hidden" name="id" value="@team.Id" />
+            <label style="flex:1;">パスワード<input name="joinPassword" type="text" value="@joinPassword" placeholder="未設定（誰でも参加可能）" /></label>
+            <button type="submit">更新</button>
+        </form>
+        <p style="font-size:12px; color:var(--table-header); margin-top:4px;">空欄にするとパスワードなしで参加可能になります。</p>
+    </div>
+
+    <h2>メンバー追加</h2>
+    <form method="post" asp-action="AddTeamMember" class="form" style="display:flex; flex-direction:row; gap:8px; max-width:600px; align-items:flex-end;">
+        <input type="hidden" name="TeamId" value="@team.Id" />
+        <label style="flex:1;">Email<input name="Email" type="email" required /></label>
+        <label>ロール
+            <select name="Role">
+                <option value="Player">Player</option>
+                <option value="AI">AI</option>
+                <option value="Owner">Owner</option>
+            </select>
+        </label>
+        <button type="submit">追加</button>
+    </form>
+
+    <h2 style="margin-top:24px;">メンバー一覧</h2>
+    <table class="table">
+        <thead><tr><th>表示名</th><th>Email</th><th>ロール</th><th>操作</th></tr></thead>
+        <tbody>
+        @foreach (var m in Model)
+        {
+            <tr>
+                <td>@m.DisplayName</td>
+                <td>@m.Email</td>
+                <td>
+                    @if (m.Role == "Owner")
+                    {
+                        <span class="badge-owner">Owner</span>
+                    }
+                    else if (m.Role == "AI")
+                    {
+                        <span class="badge-ai">AI</span>
+                    }
+                    else
+                    {
+                        <span class="badge-player">Player</span>
+                    }
+                </td>
+                <td>
+                    <form method="post" asp-action="ChangeTeamMemberRole" style="display:inline;">
+                        <input type="hidden" name="teamId" value="@team.Id" />
+                        <input type="hidden" name="userId" value="@m.UserId" />
+                        <select name="role" onchange="this.form.submit()" style="padding:4px; font-size:12px;">
+                            <option value="Player" @(m.Role == "Player" ? "selected" : "")>Player</option>
+                            <option value="AI" @(m.Role == "AI" ? "selected" : "")>AI</option>
+                            <option value="Owner" @(m.Role == "Owner" ? "selected" : "")>Owner</option>
+                        </select>
+                    </form>
+                    |
+                    <form method="post" asp-action="RemoveTeamMember" style="display:inline;">
+                        <input type="hidden" name="teamId" value="@team.Id" />
+                        <input type="hidden" name="userId" value="@m.UserId" />
+                        <button type="submit" class="btn-danger" style="padding:4px 10px; font-size:12px;">Remove</button>
+                    </form>
+                </td>
+            </tr>
+        }
+        </tbody>
+    </table>
+
+    <p style="margin-top:16px;"><a asp-action="Teams">&larr; チーム一覧に戻る</a></p>
+</section>

@@ -1,0 +1,60 @@
+@model System.Collections.Generic.List<Shinogi.ViewModels.MasterItemViewModel>
+@{
+    var masterType = ViewData["MasterType"] as string ?? "マスタ";
+    var masterAction = ViewData["MasterAction"] as string ?? "Categories";
+    var addAction = "Add" + (masterAction == "Categories" ? "Category" : "Difficulty");
+    var updateAction = "Update" + (masterAction == "Categories" ? "Category" : "Difficulty");
+    var deleteAction = "Delete" + (masterAction == "Categories" ? "Category" : "Difficulty");
+}
+<section>
+    <h1>Admin</h1>
+    <div class="tab-nav">
+        <a asp-action="Challenges">Challenges</a>
+        <a asp-action="Users">Users</a>
+        <a asp-action="Teams">Teams</a>
+        <a asp-action="Settings">Settings</a>
+        <a asp-action="Categories" class="@(masterAction == "Categories" ? "active" : "")">Categories</a>
+        <a asp-action="Difficulties" class="@(masterAction == "Difficulties" ? "active" : "")">Difficulties</a>
+    </div>
+
+    <h2>@masterType 管理</h2>
+
+    <form method="post" asp-action="@addAction" class="form" style="flex-direction:row; align-items:flex-end; max-width:600px;">
+        <label style="flex:1;">名称<input name="name" required /></label>
+        <label style="width:80px;">順序<input name="sortOrder" type="number" value="0" /></label>
+        <button type="submit">追加</button>
+    </form>
+
+    <table class="table" style="margin-top:16px;">
+        <thead><tr><th>名称</th><th>表示順</th><th>操作</th></tr></thead>
+        <tbody>
+        @if (Model.Count == 0)
+        {
+            <tr><td colspan="3" class="coming-soon">@masterType が登録されていません。</td></tr>
+        }
+        else
+        {
+            foreach (var item in Model)
+            {
+                <tr>
+                    <td>
+                        <form method="post" asp-action="@updateAction" style="display:flex; gap:8px; align-items:center;">
+                            <input type="hidden" name="id" value="@item.Id" />
+                            <input name="name" value="@item.Name" style="background:var(--surface-input); border:1px solid var(--border); border-radius:4px; color:var(--text); padding:6px 8px; width:160px;" />
+                            <input name="sortOrder" type="number" value="@item.SortOrder" style="background:var(--surface-input); border:1px solid var(--border); border-radius:4px; color:var(--text); padding:6px 8px; width:60px;" />
+                            <button type="submit" class="btn-secondary" style="padding:4px 10px; font-size:12px;">更新</button>
+                        </form>
+                    </td>
+                    <td>@item.SortOrder</td>
+                    <td>
+                        <form method="post" asp-action="@deleteAction" style="display:inline;">
+                            <input type="hidden" name="id" value="@item.Id" />
+                            <button type="submit" class="btn-danger" style="padding:4px 10px; font-size:12px;">削除</button>
+                        </form>
+                    </td>
+                </tr>
+            }
+        }
+        </tbody>
+    </table>
+</section>

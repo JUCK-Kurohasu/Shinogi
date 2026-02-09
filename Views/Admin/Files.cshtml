@@ -1,0 +1,83 @@
+@model System.Collections.Generic.List<Shinogi.Domain.ChallengeFile>
+<section>
+    <h1>Files</h1>
+    <p><strong>Challenge:</strong> @ViewData["ChallengeName"]</p>
+
+    <div id="message" style="display:none; padding:12px; margin:12px 0; border-radius:6px;"></div>
+
+    <form id="upload-form" method="post" asp-action="UploadFile" asp-route-id="@ViewData["ChallengeId"]" enctype="multipart/form-data" class="form form-wide">
+        <label>File<input name="file" type="file" required /></label>
+        <button type="submit">Upload</button>
+    </form>
+
+    <h2 style="margin-top:24px;">Uploaded Files</h2>
+    <table class="table">
+        <thead><tr><th>File Name</th><th>Uploaded At</th><th>Actions</th></tr></thead>
+        <tbody>
+        @foreach (var f in Model)
+        {
+            <tr>
+                <td><code style="font-size:13px; color:var(--primary-hover);">@f.OriginalName</code></td>
+                <td>@f.UploadedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</td>
+                <td>
+                    <form method="post" asp-action="DeleteFile" asp-route-id="@ViewData["ChallengeId"]" asp-route-fileId="@f.Id" class="delete-form" style="display:inline;">
+                        <button type="submit" class="btn-secondary" style="padding:4px 10px; font-size:12px;">Delete</button>
+                    </form>
+                </td>
+            </tr>
+        }
+        </tbody>
+    </table>
+    <p style="margin-top:16px;"><a asp-action="Challenges">&larr; Back</a></p>
+</section>
+
+<script>
+(function() {
+    var msgDiv = document.getElementById('message');
+    function showMessage(text, success) {
+        msgDiv.textContent = text;
+        msgDiv.style.display = 'block';
+        msgDiv.className = success ? 'alert-success' : 'alert-error';
+        msgDiv.style.removeProperty('background');
+        msgDiv.style.removeProperty('color');
+        msgDiv.style.removeProperty('border');
+    }
+
+    document.getElementById('upload-form').addEventListener('submit', function(e) {
+        e.preventDefault();
+        var form = this;
+        var formData = new FormData(form);
+        fetch(form.action, { method: 'POST', body: formData })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                showMessage(data.message, data.success);
+                if (data.success) {
+                    form.reset();
+                    setTimeout(function() { location.reload(); }, 1500);
+                }
+            })
+            .catch(function() {
+                showMessage('エラーが発生しました。', false);
+            });
+    });
+
+    document.querySelectorAll('.delete-form').forEach(function(form) {
+        form.addEventListener('submit', function(e) {
+            e.preventDefault();
+            if (!confirm('このファイルを削除しますか？')) return;
+            var formData = new FormData(form);
+            fetch(form.action, { method: 'POST', body: formData })
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    showMessage(data.message, data.success);
+                    if (data.success) {
+                        setTimeout(function() { location.reload(); }, 1500);
+                    }
+                })
+                .catch(function() {
+                    showMessage('エラーが発生しました。', false);
+                });
+        });
+    });
+})();
+</script>

@@ -1,0 +1,71 @@
+@model Shinogi.ViewModels.TeamViewModel
+<section>
+    <h1>Team</h1>
+    <div class="tab-nav">
+        <a asp-controller="Profile" asp-action="Index">プロフィール</a>
+        <a asp-controller="Profile" asp-action="Settings">設定</a>
+        <a asp-controller="Profile" asp-action="Team" class="active">チーム</a>
+    </div>
+
+    @if (string.IsNullOrWhiteSpace(Model.TeamName))
+    {
+        <p>チームに所属していません。</p>
+        <div style="display:flex; gap:24px; flex-wrap:wrap;">
+            <form method="post" asp-action="CreateTeam" class="form">
+                <h3 style="margin:0; color:var(--text-white);">チーム作成</h3>
+                <label>チーム名<input name="Name" required /></label>
+                <label>参加パスワード<input name="JoinPassword" type="password" placeholder="省略可" /></label>
+                <button type="submit">作成</button>
+            </form>
+            <form method="post" asp-action="JoinTeam" class="form">
+                <h3 style="margin:0; color:var(--text-white);">チーム参加</h3>
+                <label>チーム名<input name="Name" required /></label>
+                <label>パスワード<input name="Password" type="password" /></label>
+                <button type="submit">参加</button>
+            </form>
+        </div>
+    }
+    else
+    {
+        <div class="card">
+            <h3>@Model.TeamName</h3>
+            @if (!string.IsNullOrWhiteSpace(Model.TeamToken))
+            {
+                <div style="margin-bottom:16px;">
+                    <strong>Team Token (API用):</strong>
+                    <div class="token-display" title="クリックでコピー" onclick="navigator.clipboard.writeText(this.textContent.trim())">@Model.TeamToken</div>
+                    <p style="font-size:12px; color:var(--table-header); margin-top:4px;">APIリクエスト時に <code style="color:var(--primary-hover);">X-Team-Token</code> ヘッダーに設定してください。詳細は <a asp-controller="Home" asp-action="Endpoint">Endpoint</a> を参照。</p>
+                </div>
+            }
+            <table class="table">
+                <thead><tr><th>メンバー</th><th>Email</th><th>ロール</th></tr></thead>
+                <tbody>
+                @foreach (var m in Model.Members)
+                {
+                    <tr>
+                        <td>@m.DisplayName</td>
+                        <td>@m.Email</td>
+                        <td>
+                            @if (m.Role == "Owner")
+                            {
+                                <span class="badge-owner">Owner</span>
+                            }
+                            else if (m.Role == "AI")
+                            {
+                                <span class="badge-ai">AI</span>
+                            }
+                            else
+                            {
+                                <span class="badge-player">Player</span>
+                            }
+                        </td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+            <form method="post" asp-action="LeaveTeam" style="margin-top:12px;">
+                <button type="submit" class="btn-danger">チームを脱退</button>
+            </form>
+        </div>
+    }
+</section>

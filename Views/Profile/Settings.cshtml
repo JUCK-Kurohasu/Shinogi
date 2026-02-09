@@ -1,0 +1,21 @@
+@model Shinogi.ViewModels.ProfileSettingsViewModel
+<section>
+    <h1>アカウント設定</h1>
+    <div class="tab-nav">
+        <a asp-controller="Profile" asp-action="Index">プロフィール</a>
+        <a asp-controller="Profile" asp-action="Settings" class="active">設定</a>
+        <a asp-controller="Profile" asp-action="Team">チーム</a>
+    </div>
+    <form method="post" asp-action="UpdateSettings" class="form form-wide">
+        <h3 style="margin:0 0 8px; color:var(--text-white);">基本情報</h3>
+        <label>表示名<input name="DisplayName" value="@Model.DisplayName" /></label>
+        <label>メールアドレス<input name="Email" type="email" value="@Model.Email" /></label>
+
+        <h3 style="margin:16px 0 8px; color:var(--text-white);">パスワード変更</h3>
+        <label>現在のパスワード<input name="CurrentPassword" type="password" /></label>
+        <label>新しいパスワード<input name="NewPassword" type="password" /></label>
+        <label>新しいパスワード（確認）<input name="ConfirmPassword" type="password" /></label>
+
+        <button type="submit">保存</button>
+    </form>
+</section>

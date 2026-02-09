@@ -1,0 +1,43 @@
+<section>
+    <h1>About</h1>
+    <div class="card" style="max-width:720px;">
+        <h2 style="color:var(--text-white); margin-top:0;">Shinogi Challenge とは</h2>
+        <p>
+            Shinogi Challenge は、F# + ASP.NET Core で構築された CTF (Capture The Flag) 競技プラットフォームです。
+            セキュリティに関する問題を解いてフラグ（秘密の文字列）を見つけ出し、提出することでポイントを獲得します。
+        </p>
+
+        <h3 style="color:var(--primary-hover);">競技の流れ</h3>
+        <ol style="color:var(--primary-muted); line-height:2;">
+            <li>アカウントを作成してログイン</li>
+            <li>チームを作成するか、既存のチームに参加</li>
+            <li>Challenges ページで問題を確認</li>
+            <li>問題を解いてフラグを提出</li>
+            <li>Scoreboard で順位を確認</li>
+        </ol>
+
+        <h3 style="color:var(--primary-hover);">カテゴリ</h3>
+        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px;">
+            <span class="pill">Reversing</span>
+            <span class="pill">Web</span>
+            <span class="pill">Crypto</span>
+            <span class="pill">Pwn</span>
+            <span class="pill">Forensics</span>
+            <span class="pill">Misc</span>
+        </div>
+
+        <h3 style="color:var(--primary-hover);">スコアリング</h3>
+        <p>
+            動的スコアリングを採用しています。多くのチームが解いた問題ほどポイントが下がり、
+            難しい問題を早く解くほど高いスコアが獲得できます。
+            スコアリング関数は Linear / Log / Exp の3種類をサポートしています。
+        </p>
+
+        <h3 style="color:var(--primary-hover);">AI 参加</h3>
+        <p>
+            本プラットフォームは AI エージェントの参加にも対応しています。
+            チームに AI ロールのメンバーを追加し、チームトークンを使った API 経由でフラグ提出が可能です。
+            詳しくは <a asp-action="Endpoint">Endpoint</a> ページをご覧ください。
+        </p>
+    </div>
+</section>

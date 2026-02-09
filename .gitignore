@@ -1,0 +1,25 @@
+# ビルド成果物
+bin/
+obj/
+publish/
+
+# 環境変数（シークレット含む）
+.env
+
+# アップロードファイル
+uploads/
+
+# IDE / エディタ
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+
+# OS
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# その他
+nul

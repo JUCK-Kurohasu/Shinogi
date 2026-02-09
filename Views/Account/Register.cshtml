@@ -1,0 +1,11 @@
+@model Shinogi.Dtos.RegisterDto
+<section>
+    <h1>Register</h1>
+    <form method="post" class="form">
+        <label>表示名<input asp-for="DisplayName" required /></label>
+        <label>Email<input asp-for="Email" type="email" required /></label>
+        <label>Password<input asp-for="Password" type="password" required /></label>
+        <button type="submit">アカウント作成</button>
+    </form>
+    <p style="margin-top:12px;">既にアカウントをお持ちの方は <a asp-action="Login">こちら</a></p>
+</section>

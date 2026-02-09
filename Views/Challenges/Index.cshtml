@@ -1,0 +1,48 @@
+@using System.Collections.Generic
+@model System.Collections.Generic.List<Shinogi.Domain.Challenge>
+@{
+    var filesByChallenge = ViewData["FilesByChallenge"] as Dictionary<Guid, List<Shinogi.Domain.ChallengeFile>>
+        ?? new Dictionary<Guid, List<Shinogi.Domain.ChallengeFile>>();
+}
+<section>
+    <h1>Challenges</h1>
+    @if (Model.Count == 0)
+    {
+        <div class="coming-soon">Coming soon...</div>
+    }
+    else
+    {
+        <div class="cards">
+        @foreach (var c in Model)
+        {
+            <article class="card">
+                <header><h3>@c.Name</h3><span class="pill">@c.Category</span></header>
+                <p>@c.Description</p>
+                <div class="meta" style="color:var(--primary-muted); font-size:13px; margin-bottom:12px;">
+                    Value: @c.ValueInitial &rarr; min @c.ValueMinimum | Logic: @c.Logic
+                </div>
+                @if (filesByChallenge.ContainsKey(c.Id) && filesByChallenge[c.Id].Count > 0)
+                {
+                    <div style="margin-bottom:12px;">
+                        <span style="color:var(--primary-muted); font-size:13px;">Files:</span>
+                        @foreach (var f in filesByChallenge[c.Id])
+                        {
+                            <a asp-controller="Challenges" asp-action="DownloadFile" asp-route-id="@c.Id" asp-route-fileId="@f.Id"
+                               style="display:inline-block; margin:2px 6px 2px 0; padding:4px 10px; background:var(--border); border-radius:6px; color:var(--primary-hover); font-size:12px; text-decoration:none;">
+                                @f.OriginalName
+                            </a>
+                        }
+                    </div>
+                }
+                @if (User.Identity != null && User.Identity.IsAuthenticated)
+                {
+                    <form method="post" asp-controller="Challenges" asp-action="Submit" asp-route-id="@c.Id" style="display:flex; gap:8px;">
+                        <input name="flag" placeholder="flag{...}" required style="flex:1; padding:8px; border-radius:6px; border:1px solid var(--border); background:var(--surface-input); color:var(--text);" />
+                        <button type="submit">Submit</button>
+                    </form>
+                }
+            </article>
+        }
+        </div>
+    }
+</section>

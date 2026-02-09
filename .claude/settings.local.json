@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(wc:*)",
+      "Bash(where:*)",
+      "Bash(dir:*)",
+      "Bash(powershell -Command:*)",
+      "Bash(powershell -NoProfile -Command \"$s = [IO.File]::ReadAllText\\(''C:\\\\Users\\\\kouhe\\\\AppData\\\\Local\\\\Microsoft\\\\WinGet\\\\Packages\\\\Anthropic.ClaudeCode_Microsoft.Winget.Source_8wekyb3d8bbwe\\\\claude.exe''\\); $i = $s.IndexOf\\(''clawd''\\); Write-Host ''Index:'' $i\")",
+      "Bash(powershell -NoProfile -Command \"$s = [IO.File]::ReadAllText\\(''C:\\\\Users\\\\kouhe\\\\AppData\\\\Local\\\\Microsoft\\\\WinGet\\\\Packages\\\\Anthropic.ClaudeCode_Microsoft.Winget.Source_8wekyb3d8bbwe\\\\claude.exe''\\); $i = $s.IndexOf\\(''clawd''\\); Write-Host \\(''Index: '' + $i\\)\")",
+      "Bash(powershell -NoProfile -File - <<'PSEOF'\n$s = [IO.File]::ReadAllText\\('C:\\\\Users\\\\kouhe\\\\AppData\\\\Local\\\\Microsoft\\\\WinGet\\\\Packages\\\\Anthropic.ClaudeCode_Microsoft.Winget.Source_8wekyb3d8bbwe\\\\claude.exe'\\)\n$i = $s.IndexOf\\('clawd'\\)\nWrite-Host \"clawd Index: $i\"\n$i2 = $s.IndexOf\\('CLAWD'\\)\nWrite-Host \"CLAWD Index: $i2\"\n$i3 = $s.IndexOf\\('\\\\u2571'\\)\nWrite-Host \"slash Index: $i3\"\nPSEOF)",
+      "Bash(dotnet build:*)"
+    ]
+  }
+}

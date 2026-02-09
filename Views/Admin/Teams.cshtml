@@ -1,0 +1,45 @@
+@model System.Collections.Generic.List<Shinogi.ViewModels.TeamAdminViewModel>
+<section>
+    <h1>Admin</h1>
+    <div class="tab-nav">
+        <a asp-action="Challenges">Challenges</a>
+        <a asp-action="Users">Users</a>
+        <a asp-action="Teams" class="active">Teams</a>
+        <a asp-action="Settings">Settings</a>
+        <a asp-action="Categories">Categories</a>
+        <a asp-action="Difficulties">Difficulties</a>
+    </div>
+
+    <div style="margin-bottom:24px;">
+        <form method="post" asp-action="CreateTeamAdmin" class="form" style="display:flex; flex-direction:row; gap:8px; max-width:500px; align-items:flex-end;">
+            <label style="flex:1;">新規チーム名<input name="name" required /></label>
+            <button type="submit">作成</button>
+        </form>
+    </div>
+
+    <table class="table">
+        <thead><tr><th>チーム名</th><th>Token</th><th>メンバー数</th><th>作成日</th><th>操作</th></tr></thead>
+        <tbody>
+        @foreach (var t in Model)
+        {
+            <tr>
+                <td><a asp-action="EditTeam" asp-route-id="@t.Id">@t.Name</a></td>
+                <td><code style="font-size:11px; color:var(--primary-hover);">@t.Token.ToString().Substring(0, 8)...</code></td>
+                <td>@t.MemberCount</td>
+                <td>@t.CreatedAt.ToString("yyyy-MM-dd")</td>
+                <td>
+                    <a asp-action="EditTeam" asp-route-id="@t.Id">Edit</a>
+                    |
+                    <form method="post" asp-action="RegenerateTeamToken" asp-route-id="@t.Id" style="display:inline;">
+                        <button type="submit" class="btn-secondary" style="padding:4px 10px; font-size:12px;">Regen Token</button>
+                    </form>
+                    |
+                    <form method="post" asp-action="DeleteTeam" asp-route-id="@t.Id" style="display:inline;" onsubmit="return confirm('チームを削除しますか？メンバーも全員離脱します。')">
+                        <button type="submit" class="btn-danger" style="padding:4px 10px; font-size:12px;">Delete</button>
+                    </form>
+                </td>
+            </tr>
+        }
+        </tbody>
+    </table>
+</section>

@@ -1,0 +1,15 @@
+<section class="landing-hero">
+    <h1>Shinogi Challenge</h1>
+    <p>F# + ASP.NET Core で構築された CTF 競技プラットフォーム</p>
+    @if (User.Identity == null || !User.Identity.IsAuthenticated)
+    {
+        <div style="display:flex; gap:12px;">
+            <a asp-controller="Account" asp-action="Register" class="btn">アカウント作成</a>
+            <a asp-controller="Account" asp-action="Login" class="btn btn-secondary">ログイン</a>
+        </div>
+    }
+    else
+    {
+        <a asp-controller="Challenges" asp-action="Index" class="btn">チャレンジへ</a>
+    }
+</section>

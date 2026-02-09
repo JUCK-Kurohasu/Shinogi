@@ -1,0 +1,33 @@
+@model System.Collections.Generic.List<Shinogi.ViewModels.UserAdminViewModel>
+<section>
+    <h1>Admin</h1>
+    <div class="tab-nav">
+        <a asp-action="Challenges">Challenges</a>
+        <a asp-action="Users" class="active">Users</a>
+        <a asp-action="Teams">Teams</a>
+        <a asp-action="Settings">Settings</a>
+        <a asp-action="Categories">Categories</a>
+        <a asp-action="Difficulties">Difficulties</a>
+    </div>
+    <table class="table">
+        <thead><tr><th>Email</th><th>表示名</th><th>ロール</th><th>チーム</th><th>操作</th></tr></thead>
+        <tbody>
+        @foreach (var u in Model)
+        {
+            <tr>
+                <td>@u.Email</td>
+                <td>@u.DisplayName</td>
+                <td>@u.Roles</td>
+                <td>@(string.IsNullOrWhiteSpace(u.TeamName) ? "-" : u.TeamName)</td>
+                <td>
+                    <a asp-action="EditUser" asp-route-id="@u.Id">Edit</a>
+                    |
+                    <form method="post" asp-action="DeleteUser" asp-route-id="@u.Id" style="display:inline;" onsubmit="return confirm('本当に削除しますか？')">
+                        <button type="submit" class="btn-danger" style="padding:4px 10px; font-size:12px;">Delete</button>
+                    </form>
+                </td>
+            </tr>
+        }
+        </tbody>
+    </table>
+</section>

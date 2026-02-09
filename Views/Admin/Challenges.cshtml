@@ -1,0 +1,42 @@
+@model System.Collections.Generic.List<Shinogi.ViewModels.ChallengeAdminListItem>
+<section>
+    <h1>Admin</h1>
+    <div class="tab-nav">
+        <a asp-action="Challenges" class="active">Challenges</a>
+        <a asp-action="Users">Users</a>
+        <a asp-action="Teams">Teams</a>
+        <a asp-action="Settings">Settings</a>
+        <a asp-action="Categories">Categories</a>
+        <a asp-action="Difficulties">Difficulties</a>
+    </div>
+    <p><a asp-action="NewChallenge" class="btn">+ New Challenge</a></p>
+    <table class="table">
+        <thead><tr><th>Name</th><th>Category</th><th>Difficulty</th><th>Published</th><th>Created</th><th>Actions</th></tr></thead>
+        <tbody>
+        @foreach (var c in Model)
+        {
+            <tr>
+                <td>@c.Name</td>
+                <td><span class="pill">@c.Category</span></td>
+                <td>@(string.IsNullOrWhiteSpace(c.Difficulty) ? "-" : c.Difficulty)</td>
+                <td>
+                    <form method="post" asp-action="TogglePublish" asp-route-id="@c.Id" style="display:inline;">
+                        <label class="toggle-switch" title="@(c.Published ? "公開中 — クリックで非公開に" : "非公開 — クリックで公開に")">
+                            <input type="checkbox" @(c.Published ? "checked" : "") onchange="this.form.submit()" />
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </form>
+                </td>
+                <td>@c.CreatedAt.ToString("yyyy-MM-dd")</td>
+                <td>
+                    <a asp-action="EditChallenge" asp-route-id="@c.Id">Edit</a>
+                    |
+                    <a asp-action="Flags" asp-route-id="@c.Id">Flags</a>
+                    |
+                    <a asp-action="Files" asp-route-id="@c.Id">Files</a>
+                </td>
+            </tr>
+        }
+        </tbody>
+    </table>
+</section>
