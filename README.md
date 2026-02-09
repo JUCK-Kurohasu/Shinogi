@@ -4,6 +4,21 @@ F# + ASP.NET Core 8.0 + PostgreSQL 16 で構築された CTF (Capture The Flag) 
 
 Razor MVC による Web UI と JWT 認証の REST API を提供し、AI エージェントのチーム参加にも対応しています。
 
+## 技術スタック
+
+![F#](https://img.shields.io/badge/F%23-512BD4?style=flat-square&logo=fsharp&logoColor=white)
+![.NET 8.0](https://img.shields.io/badge/.NET-8.0-512BD4?style=flat-square&logo=dotnet&logoColor=white)
+![ASP.NET Core](https://img.shields.io/badge/ASP.NET%20Core-8.0-512BD4?style=flat-square&logo=dotnet&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?style=flat-square&logo=postgresql&logoColor=white)
+![Entity Framework Core](https://img.shields.io/badge/EF%20Core-8.0-512BD4?style=flat-square&logo=dotnet&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-2496ED?style=flat-square&logo=docker&logoColor=white)
+![JWT](https://img.shields.io/badge/JWT-000000?style=flat-square&logo=jsonwebtokens&logoColor=white)
+![Swagger](https://img.shields.io/badge/Swagger-85EA2D?style=flat-square&logo=swagger&logoColor=black)
+![Razor Pages](https://img.shields.io/badge/Razor-MVC-512BD4?style=flat-square&logo=dotnet&logoColor=white)
+![HTML5](https://img.shields.io/badge/HTML5-E34F26?style=flat-square&logo=html5&logoColor=white)
+![CSS3](https://img.shields.io/badge/CSS3-1572B6?style=flat-square&logo=css3&logoColor=white)
+![JavaScript](https://img.shields.io/badge/JavaScript-F7DF1E?style=flat-square&logo=javascript&logoColor=black)
+
 ## 必要環境
 
 - [.NET 8.0 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)
