@@ -86,6 +86,43 @@
             </label>
             <span style="color:var(--primary-muted); font-size:14px;">Published</span>
         </div>
+
+        <hr style="border:1px solid var(--primary-muted); margin:20px 0;" />
+        <h3 style="color:var(--primary); margin-bottom:16px;">🐳 インスタンス設定</h3>
+
+        <div style="display:flex; align-items:center; gap:10px; margin-bottom:16px;">
+            <label class="toggle-switch" title="@(Model.RequiresInstance ? "インスタンス必須" : "インスタンス不要")">
+                <input name="RequiresInstance" type="checkbox" value="true" @(Model.RequiresInstance ? "checked" : "") />
+                <span class="toggle-slider"></span>
+            </label>
+            <span style="color:var(--primary-muted); font-size:14px;">Requires Instance (インスタンス起動が必要)</span>
+        </div>
+
+        <label>Docker Image
+            <input name="InstanceImage" value="@Model.InstanceImage" placeholder="例: ctf-web-sqli:latest" />
+            <small style="color:var(--primary-muted);">Dockerイメージ名（例: ctf-web-sqli:latest）</small>
+        </label>
+
+        <label>Container Port (optional)
+            <input name="InstancePort" type="number" value="@(Model.InstancePort.HasValue ? Model.InstancePort.Value.ToString() : "")" placeholder="80" />
+            <small style="color:var(--primary-muted);">コンテナ内部ポート（空欄=80）</small>
+        </label>
+
+        <label>Lifetime (分)
+            <input name="InstanceLifetimeMinutes" type="number" value="@Model.InstanceLifetimeMinutes" required />
+            <small style="color:var(--primary-muted);">インスタンスの有効時間（分）</small>
+        </label>
+
+        <label>CPU Limit
+            <input name="InstanceCpuLimit" value="@Model.InstanceCpuLimit" placeholder="0.5" required />
+            <small style="color:var(--primary-muted);">CPU制限（例: 0.5 = 50%）</small>
+        </label>
+
+        <label>Memory Limit
+            <input name="InstanceMemoryLimit" value="@Model.InstanceMemoryLimit" placeholder="256m" required />
+            <small style="color:var(--primary-muted);">メモリ制限（例: 256m, 1g）</small>
+        </label>
+
         <button type="submit">Save</button>
     </form>
     <p style="margin-top:16px;"><a asp-action="Challenges">&larr; Back</a></p>
