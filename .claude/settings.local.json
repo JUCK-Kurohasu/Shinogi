@@ -1,0 +1,25 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dotnet build:*)",
+      "Bash(dotnet run:*)",
+      "Bash(if [ -f .env ])",
+      "Bash(then cat .env)",
+      "Bash(else echo \".envファイルが見つかりません\")",
+      "Bash(fi)",
+      "Bash(docker-compose ps:*)",
+      "Bash(docker-compose up:*)",
+      "Bash(tee:*)",
+      "Bash(docker exec:*)",
+      "Bash(curl:*)",
+      "Bash(taskkill:*)",
+      "Bash(\"C:\\\\Users\\\\kouhe\\\\OneDrive\\\\Programs\\\\Dotnet\\\\Shinogi\\\\.claude\\\\worktrees\\\\amazing-newton\\\\docker-compose.yml\" << 'EOF'\n\nnetworks:\n  shinogi-instances:\n    driver: bridge\nEOF)",
+      "Bash(chmod:*)",
+      "Bash(findstr:*)",
+      "Bash(tasklist:*)",
+      "Bash(powershell -Command:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)"
+    ]
+  }
+}

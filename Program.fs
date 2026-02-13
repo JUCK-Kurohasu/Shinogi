@@ -222,7 +222,13 @@ let mapRoutes (app: WebApplication) =
                     MaxAttempts = dto.MaxAttempts
                     Published = false
                     ReleaseAt = None
-                    CreatedAt = DateTimeOffset.UtcNow }
+                    CreatedAt = DateTimeOffset.UtcNow
+                    RequiresInstance = false
+                    InstanceImage = ""
+                    InstancePort = None
+                    InstanceLifetimeMinutes = 30
+                    InstanceCpuLimit = "0.5"
+                    InstanceMemoryLimit = "256m" }
                 db.Challenges.Add(challenge) |> ignore
                 let! _ = db.SaveChangesAsync()
                 return Results.Created($"/api/v1/challenges/{challenge.Id}", challenge)
@@ -563,6 +569,30 @@ let [<EntryPoint>] main args =
     db.Database.ExecuteSqlRaw(
         "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_ChallengeDifficulties_Name\" ON \"ChallengeDifficulties\" (\"Name\");") |> ignore
 
+    // ChallengeInstances テーブル作成
+    db.Database.ExecuteSqlRaw(
+        "CREATE TABLE IF NOT EXISTS \"ChallengeInstances\" (\"Id\" uuid PRIMARY KEY, \"ChallengeId\" uuid NOT NULL, \"UserId\" uuid NOT NULL, \"ContainerId\" text NOT NULL, \"HostPort\" integer NOT NULL, \"Url\" text NOT NULL, \"Flag\" text NOT NULL, \"CreatedAt\" timestamptz NOT NULL, \"ExpiresAt\" timestamptz NOT NULL, \"Status\" text NOT NULL DEFAULT 'Running');") |> ignore
+    db.Database.ExecuteSqlRaw(
+        "CREATE INDEX IF NOT EXISTS \"IX_ChallengeInstances_UserId\" ON \"ChallengeInstances\" (\"UserId\");") |> ignore
+    db.Database.ExecuteSqlRaw(
+        "CREATE INDEX IF NOT EXISTS \"IX_ChallengeInstances_ChallengeId\" ON \"ChallengeInstances\" (\"ChallengeId\");") |> ignore
+    db.Database.ExecuteSqlRaw(
+        "CREATE INDEX IF NOT EXISTS \"IX_ChallengeInstances_Status\" ON \"ChallengeInstances\" (\"Status\");") |> ignore
+
+    // Challenges にインスタンス関連列を追加（レガシースキーマ移行）
+    db.Database.ExecuteSqlRaw(
+        "DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='Challenges' AND column_name='RequiresInstance') THEN ALTER TABLE \"Challenges\" ADD COLUMN \"RequiresInstance\" boolean NOT NULL DEFAULT false; END IF; END $$;") |> ignore
+    db.Database.ExecuteSqlRaw(
+        "DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='Challenges' AND column_name='InstanceImage') THEN ALTER TABLE \"Challenges\" ADD COLUMN \"InstanceImage\" text NOT NULL DEFAULT ''; END IF; END $$;") |> ignore
+    db.Database.ExecuteSqlRaw(
+        "DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='Challenges' AND column_name='InstancePort') THEN ALTER TABLE \"Challenges\" ADD COLUMN \"InstancePort\" integer; END IF; END $$;") |> ignore
+    db.Database.ExecuteSqlRaw(
+        "DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='Challenges' AND column_name='InstanceLifetimeMinutes') THEN ALTER TABLE \"Challenges\" ADD COLUMN \"InstanceLifetimeMinutes\" integer NOT NULL DEFAULT 30; END IF; END $$;") |> ignore
+    db.Database.ExecuteSqlRaw(
+        "DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='Challenges' AND column_name='InstanceCpuLimit') THEN ALTER TABLE \"Challenges\" ADD COLUMN \"InstanceCpuLimit\" text NOT NULL DEFAULT '0.5'; END IF; END $$;") |> ignore
+    db.Database.ExecuteSqlRaw(
+        "DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='Challenges' AND column_name='InstanceMemoryLimit') THEN ALTER TABLE \"Challenges\" ADD COLUMN \"InstanceMemoryLimit\" text NOT NULL DEFAULT '256m'; END IF; END $$;") |> ignore
+
     // カテゴリ・難易度の初期データ
     let seedMasters () =
         task {
@@ -642,6 +672,36 @@ let [<EntryPoint>] main args =
                         if not reset.Succeeded then
                             let errors = reset.Errors |> Seq.map (fun e -> e.Description) |> String.concat "; "
                             Console.WriteLine($"Admin password reset failed: {errors}")
+
+                    // Adminsチームの作成または取得
+                    let! adminsTeam = db.Teams.FirstOrDefaultAsync(fun t -> t.Name = "Admins")
+                    let mutable teamId = Guid.Empty
+                    if isNull adminsTeam then
+                        let newTeam =
+                            { Id = Guid.NewGuid()
+                              Name = "Admins"
+                              Token = Guid.NewGuid()
+                              JoinPassword = ""
+                              CreatedAt = DateTimeOffset.UtcNow }
+                        db.Teams.Add(newTeam) |> ignore
+                        let! _ = db.SaveChangesAsync()
+                        teamId <- newTeam.Id
+                        Console.WriteLine("Admins team created.")
+                    else
+                        teamId <- adminsTeam.Id
+
+                    // AdminユーザーがAdminsチームに所属しているか確認
+                    let! existingMembership = db.TeamMembers.FirstOrDefaultAsync(fun m -> m.UserId = user.Id && m.TeamId = teamId)
+                    if isNull existingMembership then
+                        let membership =
+                            { Id = Guid.NewGuid()
+                              TeamId = teamId
+                              UserId = user.Id
+                              JoinedAt = DateTimeOffset.UtcNow
+                              Role = MemberRole.Owner }
+                        db.TeamMembers.Add(membership) |> ignore
+                        let! _ = db.SaveChangesAsync()
+                        Console.WriteLine($"Admin user added to Admins team.")
             else
                 Console.WriteLine("Admin seed skipped: SHINOGI_ADMIN_EMAIL or SHINOGI_ADMIN_PASSWORD missing.")
         }
@@ -764,7 +824,13 @@ let [<EntryPoint>] main args =
                               MaxAttempts = None
                               Published = true
                               ReleaseAt = None
-                              CreatedAt = DateTimeOffset.UtcNow }
+                              CreatedAt = DateTimeOffset.UtcNow
+                              RequiresInstance = false
+                              InstanceImage = ""
+                              InstancePort = None
+                              InstanceLifetimeMinutes = 30
+                              InstanceCpuLimit = "0.5"
+                              InstanceMemoryLimit = "256m" }
                         db.Challenges.Add(challenge) |> ignore
                         let flag =
                             { Id = Guid.NewGuid()
@@ -810,6 +876,22 @@ let [<EntryPoint>] main args =
         }
         |> fun t -> t.GetAwaiter().GetResult()
     seedTestData ()
+
+    // バックグラウンドでインスタンスクリーンアップタスク開始
+    let startInstanceCleanupTask () =
+        Task.Run(fun () ->
+            task {
+                while true do
+                    try
+                        use scope = app.Services.CreateScope()
+                        let db = scope.ServiceProvider.GetRequiredService<CtfdDbContext>()
+                        let! count = InstanceManager.cleanupExpiredInstances db
+                        ()
+                    with ex ->
+                        Console.WriteLine($"Instance cleanup error: {ex.Message}")
+                    do! Task.Delay(TimeSpan.FromMinutes(5.0))
+            } :> Task)
+    startInstanceCleanupTask () |> ignore
 
     mapRoutes app
     app.Run()

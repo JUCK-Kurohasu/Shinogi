@@ -10,6 +10,8 @@
         <p><strong>Email:</strong> @Model.Email</p>
         <p><strong>表示名:</strong> @Model.DisplayName</p>
         <p><strong>チーム:</strong> @(string.IsNullOrWhiteSpace(Model.TeamName) ? "未所属" : Model.TeamName)</p>
+        <p><strong>獲得ポイント:</strong> @Model.TotalScore pt</p>
+        <p><strong>解答済み問題:</strong> @Model.SolvedCount 問</p>
         @if (Model.IsAdmin)
         {
             <p><span class="badge-owner">Admin</span></p>

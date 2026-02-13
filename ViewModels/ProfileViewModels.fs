@@ -8,7 +8,9 @@ type ProfileViewModel =
   { Email: string
     DisplayName: string
     TeamName: string
-    IsAdmin: bool }
+    IsAdmin: bool
+    TotalScore: int
+    SolvedCount: int }
 
 [<CLIMutable>]
 type ProfileSettingsViewModel =
@@ -31,7 +33,9 @@ type TeamViewModel =
     TeamToken: string
     Members: List<TeamMemberViewModel>
     IsOwner: bool
-    CurrentUserId: Guid }
+    CurrentUserId: Guid
+    TeamScore: int
+    TeamSolvedCount: int }
 
 [<CLIMutable>]
 type ProfileUpdateDto =

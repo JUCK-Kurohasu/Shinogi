@@ -3,6 +3,12 @@
 @{
     var filesByChallenge = ViewData["FilesByChallenge"] as Dictionary<Guid, List<Shinogi.Domain.ChallengeFile>>
         ?? new Dictionary<Guid, List<Shinogi.Domain.ChallengeFile>>();
+    var solvedChallenges = ViewData["SolvedChallenges"] as HashSet<Guid>
+        ?? new HashSet<Guid>();
+    var challengeStats = ViewData["ChallengeStats"] as Dictionary<Guid, (int, int)>
+        ?? new Dictionary<Guid, (int, int)>();
+    var userInstances = ViewData["UserInstances"] as Dictionary<Guid, Shinogi.Domain.ChallengeInstance>
+        ?? new Dictionary<Guid, Shinogi.Domain.ChallengeInstance>();
 }
 <section>
     <h1>Challenges</h1>
@@ -19,7 +25,15 @@
                 <header><h3>@c.Name</h3><span class="pill">@c.Category</span></header>
                 <p>@c.Description</p>
                 <div class="meta" style="color:var(--primary-muted); font-size:13px; margin-bottom:12px;">
-                    Value: @c.ValueInitial &rarr; min @c.ValueMinimum | Logic: @c.Logic
+                    @if (challengeStats.ContainsKey(c.Id))
+                    {
+                        var (currentValue, solveCount) = challengeStats[c.Id];
+                        <text>現在の点数: @currentValue pt / 解答済み: @solveCount チーム</text>
+                    }
+                    else
+                    {
+                        <text>現在の点数: @c.ValueInitial pt / 解答済み: 0 チーム</text>
+                    }
                 </div>
                 @if (filesByChallenge.ContainsKey(c.Id) && filesByChallenge[c.Id].Count > 0)
                 {
@@ -34,11 +48,34 @@
                         }
                     </div>
                 }
+                @if (c.RequiresInstance && User.Identity != null && User.Identity.IsAuthenticated)
+                {
+                    @if (userInstances.ContainsKey(c.Id))
+                    {
+                        var instance = userInstances[c.Id];
+                        var remaining = (instance.ExpiresAt - DateTimeOffset.UtcNow).TotalMinutes;
+                        <div style="background:var(--card-bg); padding:12px; border-radius:6px; margin-bottom:12px; border:1px solid var(--primary);">
+                            <strong style="color:var(--primary);">✓ インスタンス起動中</strong><br>
+                            <span style="font-size:13px;">URL: <a href="@instance.Url" target="_blank" style="color:var(--primary-hover);">@instance.Url</a></span><br>
+                            <span style="font-size:13px;">残り時間: @((int)remaining) 分</span><br>
+                            <form method="post" asp-action="StopInstance" asp-route-id="@c.Id" style="margin-top:8px;">
+                                <button type="submit" class="btn-danger" style="font-size:13px; padding:6px 12px;">停止</button>
+                            </form>
+                        </div>
+                    }
+                    else
+                    {
+                        <form method="post" asp-action="StartInstance" asp-route-id="@c.Id" style="margin-bottom:12px;">
+                            <button type="submit" style="width:100%;">🚀 インスタンスを起動</button>
+                        </form>
+                    }
+                }
                 @if (User.Identity != null && User.Identity.IsAuthenticated)
                 {
+                    var isSolved = solvedChallenges.Contains(c.Id);
                     <form method="post" asp-controller="Challenges" asp-action="Submit" asp-route-id="@c.Id" style="display:flex; gap:8px;">
-                        <input name="flag" placeholder="flag{...}" required style="flex:1; padding:8px; border-radius:6px; border:1px solid var(--border); background:var(--surface-input); color:var(--text);" />
-                        <button type="submit">Submit</button>
+                        <input name="flag" placeholder="@(isSolved ? "solved!" : "flag{...}")" required style="flex:1; padding:8px; border-radius:6px; border:1px solid var(--border); background:var(--surface-input); color:var(--text);" @(isSolved ? "disabled" : "") />
+                        <button type="submit" @(isSolved ? "disabled" : "")>Submit</button>
                     </form>
                 }
             </article>
