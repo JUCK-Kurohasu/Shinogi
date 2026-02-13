@@ -45,6 +45,54 @@ type ChallengesController(db: CtfdDbContext, userManager: UserManager<CtfdUser>,
             for (cid, fs) in allFiles |> Seq.groupBy (fun f -> f.ChallengeId) do
                 filesByChallenge.[cid] <- List<ChallengeFile>(fs)
         this.ViewData["FilesByChallenge"] <- filesByChallenge
+
+        // ユーザーの正解済みチャレンジIDを取得
+        let solvedChallengeIds = HashSet<Guid>()
+        if this.User.Identity <> null && this.User.Identity.IsAuthenticated then
+            let! user = userManager.GetUserAsync(this.User)
+            if not (isNull user) then
+                let! solved =
+                    db.Submissions
+                      .Where(fun s -> s.AccountId = user.Id && s.IsCorrect && challengeIds.Contains(s.ChallengeId))
+                      .Select(fun s -> s.ChallengeId)
+                      .ToListAsync()
+                for cid in solved do
+                    solvedChallengeIds.Add(cid) |> ignore
+        this.ViewData["SolvedChallenges"] <- solvedChallengeIds
+
+        // 各チャレンジの現在のポイントと解答済みチーム数を計算
+        let! allSubmissions =
+            if challengeIds.Length = 0 then
+                Task.FromResult(List<Submission>())
+            else
+                db.Submissions
+                  .Where(fun s -> s.IsCorrect && challengeIds.Contains(s.ChallengeId))
+                  .ToListAsync()
+        let challengeStats = Dictionary<Guid, (int * int)>() // (currentValue, solveCount)
+        for c in challenges do
+            let solveCount =
+                allSubmissions
+                |> Seq.filter (fun s -> s.ChallengeId = c.Id)
+                |> Seq.map (fun s -> s.AccountId)
+                |> Seq.distinct
+                |> Seq.length
+            let currentValue = Scoring.dynamicValue c solveCount
+            challengeStats.[c.Id] <- (currentValue, solveCount)
+        this.ViewData["ChallengeStats"] <- challengeStats
+
+        // ユーザーのインスタンス情報を取得
+        let userInstances = Dictionary<Guid, ChallengeInstance>()
+        if this.User.Identity <> null && this.User.Identity.IsAuthenticated then
+            let! user = userManager.GetUserAsync(this.User)
+            if not (isNull user) then
+                let! instances =
+                    db.ChallengeInstances
+                      .Where(fun i -> i.UserId = user.Id && i.Status = InstanceStatus.Running && challengeIds.Contains(i.ChallengeId))
+                      .ToListAsync()
+                for inst in instances do
+                    userInstances.[inst.ChallengeId] <- inst
+        this.ViewData["UserInstances"] <- userInstances
+
         return this.View(challenges) :> IActionResult
     }
 
@@ -109,4 +157,57 @@ type ChallengesController(db: CtfdDbContext, userManager: UserManager<CtfdUser>,
             else
                 let bytes = File.ReadAllBytes(filePath)
                 return this.File(bytes, "application/octet-stream", file.OriginalName) :> IActionResult
+    }
+
+    [<HttpPost>]
+    [<Authorize>]
+    member this.StartInstance(id: Guid) : Task<IActionResult> = task {
+        let! user = userManager.GetUserAsync(this.User)
+        if isNull user then
+            return this.RedirectToAction("Login", "Account") :> IActionResult
+        else
+            let! challenge = db.Challenges.FirstOrDefaultAsync(fun c -> c.Id = id && c.Published && c.RequiresInstance)
+            if isNull challenge then
+                this.TempData["Error"] <- "チャレンジが見つかりません。"
+                return this.RedirectToAction("Index") :> IActionResult
+            else
+                let! canCreate = InstanceManager.canCreateInstance db user.Id
+                if not canCreate then
+                    this.TempData["Error"] <- "同時起動数の上限（3個）に達しています。既存のインスタンスを停止してください。"
+                    return this.RedirectToAction("Index") :> IActionResult
+                else
+                    let publicUrl =
+                        let envUrl = System.Environment.GetEnvironmentVariable("SHINOGI_PUBLIC_URL")
+                        if String.IsNullOrWhiteSpace envUrl then "http://localhost" else envUrl
+
+                    let! result = InstanceManager.createInstance db challenge user.Id publicUrl
+                    match result with
+                    | Ok instance ->
+                        this.TempData["Success"] <- $"インスタンスを起動しました: {instance.Url}"
+                        return this.RedirectToAction("Index") :> IActionResult
+                    | Error msg ->
+                        this.TempData["Error"] <- msg
+                        return this.RedirectToAction("Index") :> IActionResult
+    }
+
+    [<HttpPost>]
+    [<Authorize>]
+    member this.StopInstance(id: Guid) : Task<IActionResult> = task {
+        let! user = userManager.GetUserAsync(this.User)
+        if isNull user then
+            return this.RedirectToAction("Login", "Account") :> IActionResult
+        else
+            let! instance = db.ChallengeInstances.FirstOrDefaultAsync(fun i -> i.ChallengeId = id && i.UserId = user.Id && i.Status = InstanceStatus.Running)
+            if isNull instance then
+                this.TempData["Error"] <- "起動中のインスタンスが見つかりません。"
+                return this.RedirectToAction("Index") :> IActionResult
+            else
+                let! result = InstanceManager.stopInstance db instance.Id
+                match result with
+                | Ok () ->
+                    this.TempData["Success"] <- "インスタンスを停止しました。"
+                    return this.RedirectToAction("Index") :> IActionResult
+                | Error msg ->
+                    this.TempData["Error"] <- msg
+                    return this.RedirectToAction("Index") :> IActionResult
     }

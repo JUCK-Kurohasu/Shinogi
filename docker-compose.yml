@@ -25,3 +25,7 @@ services:
 
 volumes:
   shinogi_pgdata:
+
+networks:
+  shinogi-instances:
+    driver: bridge

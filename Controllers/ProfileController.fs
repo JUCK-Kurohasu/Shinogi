@@ -34,11 +34,26 @@ type ProfileController(userManager: UserManager<CtfdUser>, db: CtfdDbContext) =
                 match teamOpt with
                 | Some t -> t.Name
                 | None -> ""
+
+            // ユーザーのスコア情報を取得
+            let! userSubmissions =
+                db.Submissions
+                  .Where(fun s -> s.AccountId = user.Id && s.IsCorrect)
+                  .ToListAsync()
+            let totalScore = userSubmissions |> Seq.sumBy (fun s -> s.ValueAwarded)
+            let solvedCount =
+                userSubmissions
+                |> Seq.map (fun s -> s.ChallengeId)
+                |> Seq.distinct
+                |> Seq.length
+
             let model =
                 { Email = user.Email
                   DisplayName = user.DisplayName
                   TeamName = teamName
-                  IsAdmin = this.User.IsInRole("Admins") }
+                  IsAdmin = this.User.IsInRole("Admins")
+                  TotalScore = totalScore
+                  SolvedCount = solvedCount }
             return this.View(model) :> IActionResult
     }
 
@@ -123,7 +138,9 @@ type ProfileController(userManager: UserManager<CtfdUser>, db: CtfdDbContext) =
                       TeamToken = ""
                       Members = List<TeamMemberViewModel>()
                       IsOwner = false
-                      CurrentUserId = user.Id }
+                      CurrentUserId = user.Id
+                      TeamScore = 0
+                      TeamSolvedCount = 0 }
                 return this.View(model) :> IActionResult
             else
                 let! team = db.Teams.FirstOrDefaultAsync(fun t -> t.Id = memberRow.TeamId)
@@ -143,12 +160,27 @@ type ProfileController(userManager: UserManager<CtfdUser>, db: CtfdDbContext) =
                         | _ -> None)
                     |> List<TeamMemberViewModel>
                 let isOwner = memberRow.Role = MemberRole.Owner
+
+                // チームのスコア情報を取得
+                let! teamSubmissions =
+                    db.Submissions
+                      .Where(fun s -> s.IsCorrect && userIds.Contains(s.AccountId))
+                      .ToListAsync()
+                let teamScore = teamSubmissions |> Seq.sumBy (fun s -> s.ValueAwarded)
+                let teamSolvedCount =
+                    teamSubmissions
+                    |> Seq.map (fun s -> s.ChallengeId)
+                    |> Seq.distinct
+                    |> Seq.length
+
                 let model =
                     { TeamName = if isNull team then "" else team.Name
                       TeamToken = if isNull team then "" else team.Token.ToString()
                       Members = viewMembers
                       IsOwner = isOwner
-                      CurrentUserId = user.Id }
+                      CurrentUserId = user.Id
+                      TeamScore = teamScore
+                      TeamSolvedCount = teamSolvedCount }
                 return this.View(model) :> IActionResult
     }
 

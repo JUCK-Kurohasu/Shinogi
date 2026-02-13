@@ -29,9 +29,11 @@
     {
         <div class="card">
             <h3>@Model.TeamName</h3>
+            <p><strong>チーム合計ポイント:</strong> @Model.TeamScore pt</p>
+            <p><strong>チーム解答済み問題:</strong> @Model.TeamSolvedCount 問</p>
             @if (!string.IsNullOrWhiteSpace(Model.TeamToken))
             {
-                <div style="margin-bottom:16px;">
+                <div style="margin-bottom:16px; margin-top:16px;">
                     <strong>Team Token (API用):</strong>
                     <div class="token-display" title="クリックでコピー" onclick="navigator.clipboard.writeText(this.textContent.trim())">@Model.TeamToken</div>
                     <p style="font-size:12px; color:var(--table-header); margin-top:4px;">APIリクエスト時に <code style="color:var(--primary-hover);">X-Team-Token</code> ヘッダーに設定してください。詳細は <a asp-controller="Home" asp-action="Endpoint">Endpoint</a> を参照。</p>

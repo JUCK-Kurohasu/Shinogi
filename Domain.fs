@@ -18,6 +18,11 @@ type MemberRole =
     | Player
     | AI
 
+type InstanceStatus =
+    | Running
+    | Stopped
+    | Expired
+
 [<AllowNullLiteral>]
 type CtfdUser() =
     inherit IdentityUser<Guid>()
@@ -50,7 +55,13 @@ type Challenge =
     MaxAttempts: int option
     Published: bool
     ReleaseAt: DateTimeOffset option
-    CreatedAt: DateTimeOffset }
+    CreatedAt: DateTimeOffset
+    RequiresInstance: bool
+    InstanceImage: string
+    InstancePort: int option
+    InstanceLifetimeMinutes: int
+    InstanceCpuLimit: string
+    InstanceMemoryLimit: string }
 
 [<CLIMutable>]
 type Flag =
@@ -93,6 +104,19 @@ type ChallengeFile =
     OriginalName: string
     StoredName: string
     UploadedAt: DateTimeOffset }
+
+[<CLIMutable>]
+type ChallengeInstance =
+  { Id: Guid
+    ChallengeId: Guid
+    UserId: Guid
+    ContainerId: string
+    HostPort: int
+    Url: string
+    Flag: string
+    CreatedAt: DateTimeOffset
+    ExpiresAt: DateTimeOffset
+    Status: InstanceStatus }
 
 [<CLIMutable>]
 type CtfSettings =
