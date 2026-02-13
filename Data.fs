@@ -19,6 +19,7 @@ type CtfdDbContext(options: DbContextOptions<CtfdDbContext>) =
     [<DefaultValue>] val mutable challengeCategories: DbSet<ChallengeCategory>
     [<DefaultValue>] val mutable challengeDifficulties: DbSet<ChallengeDifficulty>
     [<DefaultValue>] val mutable challengeFiles: DbSet<ChallengeFile>
+    [<DefaultValue>] val mutable challengeInstances: DbSet<ChallengeInstance>
 
     member this.Challenges with get() = this.challenges and set v = this.challenges <- v
     member this.Flags with get() = this.flags and set v = this.flags <- v
@@ -29,6 +30,7 @@ type CtfdDbContext(options: DbContextOptions<CtfdDbContext>) =
     member this.ChallengeCategories with get() = this.challengeCategories and set v = this.challengeCategories <- v
     member this.ChallengeDifficulties with get() = this.challengeDifficulties and set v = this.challengeDifficulties <- v
     member this.ChallengeFiles with get() = this.challengeFiles and set v = this.challengeFiles <- v
+    member this.ChallengeInstances with get() = this.challengeInstances and set v = this.challengeInstances <- v
 
     override _.OnModelCreating(builder: ModelBuilder) =
         base.OnModelCreating(builder)
@@ -56,6 +58,14 @@ type CtfdDbContext(options: DbContextOptions<CtfdDbContext>) =
                     | "owner" -> MemberRole.Owner
                     | "ai" -> MemberRole.AI
                     | _ -> MemberRole.Player))
+        let instanceStatusConverter =
+            ValueConverter<InstanceStatus, string>(
+                (fun v -> v.ToString()),
+                (fun s ->
+                    match s.ToLowerInvariant() with
+                    | "stopped" -> InstanceStatus.Stopped
+                    | "expired" -> InstanceStatus.Expired
+                    | _ -> InstanceStatus.Running))
         let maxAttemptsConverter =
             ValueConverter<int option, Nullable<int>>(
                 (fun v -> match v with | Some i -> Nullable i | None -> Nullable()),
@@ -68,6 +78,7 @@ type CtfdDbContext(options: DbContextOptions<CtfdDbContext>) =
         builder.Entity<Challenge>().Property(fun c -> c.Logic).HasConversion(logicConverter) |> ignore
         builder.Entity<Challenge>().Property(fun c -> c.MaxAttempts).HasConversion(maxAttemptsConverter).IsRequired(false) |> ignore
         builder.Entity<Challenge>().Property(fun c -> c.ReleaseAt).HasConversion(dtoConverter).IsRequired(false) |> ignore
+        builder.Entity<Challenge>().Property(fun c -> c.InstancePort).HasConversion(maxAttemptsConverter).IsRequired(false) |> ignore
         builder.Entity<CtfSettings>().Property(fun s -> s.EventStart).HasConversion(dtoConverter).IsRequired(false) |> ignore
         builder.Entity<CtfSettings>().Property(fun s -> s.EventEnd).HasConversion(dtoConverter).IsRequired(false) |> ignore
         builder.Entity<Flag>().HasIndex("ChallengeId", "ContentHash").IsUnique() |> ignore
@@ -81,3 +92,8 @@ type CtfdDbContext(options: DbContextOptions<CtfdDbContext>) =
         builder.Entity<ChallengeCategory>().HasIndex("Name").IsUnique() |> ignore
         builder.Entity<ChallengeDifficulty>().HasIndex("Name").IsUnique() |> ignore
         builder.Entity<ChallengeFile>().HasOne<Challenge>().WithMany().HasForeignKey("ChallengeId") |> ignore
+        builder.Entity<ChallengeInstance>().Property(fun i -> i.Status).HasConversion(instanceStatusConverter) |> ignore
+        builder.Entity<ChallengeInstance>().HasIndex("UserId") |> ignore
+        builder.Entity<ChallengeInstance>().HasIndex("ChallengeId") |> ignore
+        builder.Entity<ChallengeInstance>().HasIndex("Status") |> ignore
+        builder.Entity<ChallengeInstance>().HasOne<Challenge>().WithMany().HasForeignKey("ChallengeId") |> ignore

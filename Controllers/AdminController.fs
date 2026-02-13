@@ -81,7 +81,13 @@ type AdminController(db: CtfdDbContext, userManager: UserManager<CtfdUser>, env:
               Published = false
               ReleaseAt = ""
               Categories = cats
-              Difficulties = diffs }
+              Difficulties = diffs
+              RequiresInstance = false
+              InstanceImage = ""
+              InstancePort = Nullable()
+              InstanceLifetimeMinutes = 30
+              InstanceCpuLimit = "0.5"
+              InstanceMemoryLimit = "256m" }
         return this.View(model) :> IActionResult
     }
 
@@ -110,7 +116,13 @@ type AdminController(db: CtfdDbContext, userManager: UserManager<CtfdUser>, env:
                   MaxAttempts = if dto.MaxAttempts.HasValue then Some dto.MaxAttempts.Value else None
                   Published = dto.Published
                   ReleaseAt = releaseAt
-                  CreatedAt = DateTimeOffset.UtcNow }
+                  CreatedAt = DateTimeOffset.UtcNow
+                  RequiresInstance = dto.RequiresInstance
+                  InstanceImage = if isNull dto.InstanceImage then "" else dto.InstanceImage.Trim()
+                  InstancePort = if dto.InstancePort.HasValue then Some dto.InstancePort.Value else None
+                  InstanceLifetimeMinutes = dto.InstanceLifetimeMinutes
+                  InstanceCpuLimit = if isNull dto.InstanceCpuLimit then "0.5" else dto.InstanceCpuLimit.Trim()
+                  InstanceMemoryLimit = if isNull dto.InstanceMemoryLimit then "256m" else dto.InstanceMemoryLimit.Trim() }
             db.Challenges.Add(challenge) |> ignore
             let! _ = db.SaveChangesAsync()
             return this.RedirectToAction("Challenges") :> IActionResult
@@ -138,7 +150,13 @@ type AdminController(db: CtfdDbContext, userManager: UserManager<CtfdUser>, env:
                   Published = challenge.Published
                   ReleaseAt = match challenge.ReleaseAt with | Some d -> d.ToLocalTime().ToString("yyyy-MM-ddTHH:mm") | None -> ""
                   Categories = cats
-                  Difficulties = diffs }
+                  Difficulties = diffs
+                  RequiresInstance = challenge.RequiresInstance
+                  InstanceImage = challenge.InstanceImage
+                  InstancePort = if challenge.InstancePort.IsSome then Nullable challenge.InstancePort.Value else Nullable()
+                  InstanceLifetimeMinutes = challenge.InstanceLifetimeMinutes
+                  InstanceCpuLimit = challenge.InstanceCpuLimit
+                  InstanceMemoryLimit = challenge.InstanceMemoryLimit }
             return this.View(model) :> IActionResult
     }
 
@@ -166,7 +184,13 @@ type AdminController(db: CtfdDbContext, userManager: UserManager<CtfdUser>, env:
                     Logic = parseLogic dto.Logic
                     MaxAttempts = if dto.MaxAttempts.HasValue then Some dto.MaxAttempts.Value else None
                     Published = dto.Published
-                    ReleaseAt = releaseAt }
+                    ReleaseAt = releaseAt
+                    RequiresInstance = dto.RequiresInstance
+                    InstanceImage = if isNull dto.InstanceImage then "" else dto.InstanceImage.Trim()
+                    InstancePort = if dto.InstancePort.HasValue then Some dto.InstancePort.Value else None
+                    InstanceLifetimeMinutes = dto.InstanceLifetimeMinutes
+                    InstanceCpuLimit = if isNull dto.InstanceCpuLimit then "0.5" else dto.InstanceCpuLimit.Trim()
+                    InstanceMemoryLimit = if isNull dto.InstanceMemoryLimit then "256m" else dto.InstanceMemoryLimit.Trim() }
             db.Entry(existing).State <- EntityState.Detached
             db.Challenges.Update(updated) |> ignore
             let! _ = db.SaveChangesAsync()

@@ -28,7 +28,13 @@ type ChallengeEditViewModel =
     Published: bool
     ReleaseAt: string
     Categories: List<string>
-    Difficulties: List<string> }
+    Difficulties: List<string>
+    RequiresInstance: bool
+    InstanceImage: string
+    InstancePort: Nullable<int>
+    InstanceLifetimeMinutes: int
+    InstanceCpuLimit: string
+    InstanceMemoryLimit: string }
 
 [<CLIMutable>]
 type FlagCreateViewModel =

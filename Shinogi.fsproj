@@ -9,10 +9,11 @@
   <ItemGroup>
     <Compile Include="Domain.fs" />
     <Compile Include="Dtos.fs" />
+    <Compile Include="Data.fs" />
     <Compile Include="Services/Scoring.fs" />
     <Compile Include="Services/Security.fs" />
     <Compile Include="Services/EmailService.fs" />
-    <Compile Include="Data.fs" />
+    <Compile Include="Services/InstanceManager.fs" />
     <Compile Include="ViewModels/ScoreEntry.fs" />
     <Compile Include="ViewModels/ProfileViewModels.fs" />
     <Compile Include="ViewModels/AdminViewModels.fs" />
