@@ -27,18 +27,13 @@ type AccountController(userManager: UserManager<CtfdUser>, signInManager: SignIn
                 this.TempData["Error"] <- "メールアドレスまたはパスワードが正しくありません。"
                 return this.View() :> IActionResult
             | u ->
-                let! emailConfirmed = userManager.IsEmailConfirmedAsync(u)
-                if not emailConfirmed then
-                    this.TempData["Error"] <- "メールアドレスが未確認です。受信トレイの確認メールをご確認ください。"
-                    return this.View() :> IActionResult
+                let! res = signInManager.PasswordSignInAsync(u, dto.Password, true, false)
+                if res.Succeeded then
+                    this.TempData["Success"] <- "ログインしました。"
+                    return this.RedirectToAction("Index", "Home") :> IActionResult
                 else
-                    let! res = signInManager.PasswordSignInAsync(u, dto.Password, true, false)
-                    if res.Succeeded then
-                        this.TempData["Success"] <- "ログインしました。"
-                        return this.RedirectToAction("Index", "Home") :> IActionResult
-                    else
-                        this.TempData["Error"] <- "メールアドレスまたはパスワードが正しくありません。"
-                        return this.View() :> IActionResult
+                    this.TempData["Error"] <- "メールアドレスまたはパスワードが正しくありません。"
+                    return this.View() :> IActionResult
     }
 
     member this.Register() = this.View() :> IActionResult
@@ -52,13 +47,10 @@ type AccountController(userManager: UserManager<CtfdUser>, signInManager: SignIn
             let user = CtfdUser(Email = dto.Email, UserName = dto.Email, DisplayName = dto.DisplayName)
             let! res = userManager.CreateAsync(user, dto.Password)
             if res.Succeeded then
+                // メール確認をスキップして即時有効化
                 let! token = userManager.GenerateEmailConfirmationTokenAsync(user)
-                let callbackUrl =
-                    this.Url.Action("ConfirmEmail", "Account",
-                        {| userId = user.Id.ToString(); token = token |},
-                        this.Request.Scheme)
-                do! Shinogi.Services.EmailService.sendConfirmationEmail user.Email callbackUrl
-                this.TempData["Success"] <- "アカウントを作成しました。確認メールを送信しましたので、メール内のリンクをクリックしてアカウントを有効化してください。"
+                let! _ = userManager.ConfirmEmailAsync(user, token)
+                this.TempData["Success"] <- "アカウントを作成しました。ログインしてください。"
                 return this.RedirectToAction("Login") :> IActionResult
             else
                 let errors = res.Errors |> Seq.map (fun e -> e.Description) |> String.concat " "
