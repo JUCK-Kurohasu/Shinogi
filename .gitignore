@@ -11,6 +11,7 @@ uploads/
 
 # IDE / エディタ
 .vs/
+.claude/
 .vscode/
 .idea/
 *.user
