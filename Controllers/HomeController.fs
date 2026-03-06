@@ -58,15 +58,15 @@ type HomeController(db: CtfdDbContext, userManager: UserManager<CtfdUser>) =
             List<ScoreEntry>(
                 submissions
                 |> Seq.groupBy (fun s -> s.AccountId)
-                |> Seq.map (fun (accountId, items) ->
-                    let displayName =
-                        match userById.TryGetValue(accountId) with
-                        | true, u -> if String.IsNullOrWhiteSpace u.DisplayName then u.Email else u.DisplayName
-                        | _ -> accountId.ToString()
-                    { AccountId = accountId
-                      DisplayName = displayName
-                      TeamName = resolveTeamName accountId
-                      Score = items |> Seq.sumBy (fun s -> s.ValueAwarded) })
+                |> Seq.choose (fun (accountId, items) ->
+                    match userById.TryGetValue(accountId) with
+                    | false, _ -> None  // 削除済みユーザーは除外
+                    | true, u ->
+                        let displayName = if String.IsNullOrWhiteSpace u.DisplayName then u.Email else u.DisplayName
+                        Some { AccountId = accountId
+                               DisplayName = displayName
+                               TeamName = resolveTeamName accountId
+                               Score = items |> Seq.sumBy (fun s -> s.ValueAwarded) })
                 |> Seq.sortByDescending (fun e -> e.Score)
                 |> Seq.truncate 20)
 

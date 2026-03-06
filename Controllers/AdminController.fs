@@ -401,6 +401,9 @@ type AdminController(db: CtfdDbContext, userManager: UserManager<CtfdUser>, env:
             let! memberRow = db.TeamMembers.FirstOrDefaultAsync(fun m -> m.UserId = user.Id)
             if not (isNull memberRow) then
                 db.TeamMembers.Remove(memberRow) |> ignore
+            let! submissions = db.Submissions.Where(fun s -> s.AccountId = user.Id).ToListAsync()
+            db.Submissions.RemoveRange(submissions) |> ignore
+            let! _ = db.SaveChangesAsync()
             let! _ = userManager.DeleteAsync(user)
             ()
         return this.RedirectToAction("Users") :> IActionResult
