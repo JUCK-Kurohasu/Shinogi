@@ -50,7 +50,7 @@ type ChallengesController(db: CtfdDbContext, userManager: UserManager<CtfdUser>,
         let solvedChallengeIds = HashSet<Guid>()
         if this.User.Identity <> null && this.User.Identity.IsAuthenticated then
             let! user = userManager.GetUserAsync(this.User)
-            if not (isNull user) then
+            if not (isNull user) && challengeIds.Length > 0 then
                 let! solved =
                     db.Submissions
                       .Where(fun s -> s.AccountId = user.Id && s.IsCorrect && challengeIds.Contains(s.ChallengeId))
@@ -84,7 +84,7 @@ type ChallengesController(db: CtfdDbContext, userManager: UserManager<CtfdUser>,
         let userInstances = Dictionary<Guid, ChallengeInstance>()
         if this.User.Identity <> null && this.User.Identity.IsAuthenticated then
             let! user = userManager.GetUserAsync(this.User)
-            if not (isNull user) then
+            if not (isNull user) && challengeIds.Length > 0 then
                 let! instances =
                     db.ChallengeInstances
                       .Where(fun i -> i.UserId = user.Id && i.Status = InstanceStatus.Running && challengeIds.Contains(i.ChallengeId))

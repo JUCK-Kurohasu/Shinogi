@@ -64,7 +64,7 @@ let configureServices (builder: WebApplicationBuilder) =
                 | null -> "unknown"
                 | addr -> addr.ToString()
             RateLimitPartition.GetFixedWindowLimiter(ip, fun _ ->
-                FixedWindowRateLimiterOptions(PermitLimit = 20, Window = TimeSpan.FromMinutes 1., QueueLimit = 0))))
+                FixedWindowRateLimiterOptions(PermitLimit = 200, Window = TimeSpan.FromMinutes 1., QueueLimit = 50))))
         |> ignore
 
     builder.Services.AddControllersWithViews().AddRazorRuntimeCompilation() |> ignore
