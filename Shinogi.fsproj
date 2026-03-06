@@ -17,11 +17,13 @@
     <Compile Include="ViewModels/ScoreEntry.fs" />
     <Compile Include="ViewModels/ProfileViewModels.fs" />
     <Compile Include="ViewModels/AdminViewModels.fs" />
+    <Compile Include="ViewModels/CertificateViewModels.fs" />
     <Compile Include="Controllers/HomeController.fs" />
     <Compile Include="Controllers/ChallengesController.fs" />
     <Compile Include="Controllers/AccountController.fs" />
     <Compile Include="Controllers/ProfileController.fs" />
     <Compile Include="Controllers/AdminController.fs" />
+    <Compile Include="Controllers/CertificateController.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
 

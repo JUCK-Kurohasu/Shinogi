@@ -1,0 +1,354 @@
+@model Shinogi.ViewModels.CertificateViewModel
+@{
+    Layout = null; // 証明書ページはナビなし・独立したHTML
+
+    /*
+    ============================================================
+      CERTIFICATE TEMPLATE - カスタマイズガイド
+    ============================================================
+
+    【CTFごとに変えるもの】
+    1. CSS変数（:root セクション）でカラーテーマを変更
+       - --cert-bg       : 背景色
+       - --cert-accent   : アクセントカラー（枠・タイトルなど）
+       - --cert-text     : メインテキスト色
+       - --cert-sub      : サブテキスト色
+
+    2. .cert-logo のコメントを外してロゴ画像を差し込む
+
+    3. .cert-event-date の日付テキストを変更
+
+    4. .cert-footer の署名・肩書きを変更
+
+    【環境変数】
+    - SHINOGI_CTF_NAME : CTF名（Controllerで読み込み済み）
+
+    ============================================================
+    */
+}
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8" />
+    <title>修了証 - @Model.CtfName</title>
+    <style>
+        /* ============================================================
+           CSS変数 — ここを変えるだけでテーマが切り替わる
+           ============================================================ */
+        :root {
+            --cert-bg:         #0a0014;
+            --cert-frame:      #855CF9;
+            --cert-frame2:     #4b2e8a;
+            --cert-accent:     #855CF9;
+            --cert-gold:       #c9a84c;
+            --cert-text:       #ffffff;
+            --cert-sub:        #c4b5e8;
+            --cert-paper:      #100022;
+        }
+
+        /* ============================================================
+           印刷時のスタイル — @media print で制御
+           ============================================================ */
+        @media print {
+            .cert-actions { display: none !important; }
+            body { background: white; }
+            .cert-wrapper {
+                box-shadow: none !important;
+                border: 4px solid var(--cert-frame) !important;
+            }
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            background: var(--cert-bg);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            font-family: 'Georgia', 'Times New Roman', serif;
+            padding: 40px 20px;
+        }
+
+        /* ============================================================
+           証明書本体
+           ============================================================ */
+        .cert-wrapper {
+            width: 860px;
+            max-width: 100%;
+            background: var(--cert-paper);
+            border: 3px solid var(--cert-frame);
+            box-shadow:
+                0 0 0 8px var(--cert-bg),
+                0 0 0 11px var(--cert-frame2),
+                0 0 60px rgba(133, 92, 249, 0.4);
+            padding: 60px 80px;
+            position: relative;
+            text-align: center;
+        }
+
+        /* 四隅の装飾 */
+        .cert-wrapper::before,
+        .cert-wrapper::after {
+            content: '✦';
+            position: absolute;
+            font-size: 20px;
+            color: var(--cert-gold);
+        }
+        .cert-wrapper::before { top: 18px; left: 24px; }
+        .cert-wrapper::after  { top: 18px; right: 24px; }
+        .cert-corner-bl,
+        .cert-corner-br {
+            position: absolute;
+            font-size: 20px;
+            color: var(--cert-gold);
+        }
+        .cert-corner-bl { bottom: 18px; left: 24px; }
+        .cert-corner-br { bottom: 18px; right: 24px; }
+
+        /* ロゴ（使用する場合はコメントを外す） */
+        /*
+        .cert-logo {
+            margin-bottom: 24px;
+        }
+        .cert-logo img {
+            height: 64px;
+        }
+        */
+
+        /* CTF名 */
+        .cert-ctf-name {
+            font-size: 13px;
+            letter-spacing: 6px;
+            text-transform: uppercase;
+            color: var(--cert-accent);
+            margin-bottom: 12px;
+        }
+
+        /* 装飾ライン */
+        .cert-divider {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin: 16px auto;
+            width: 80%;
+        }
+        .cert-divider::before,
+        .cert-divider::after {
+            content: '';
+            flex: 1;
+            height: 1px;
+            background: linear-gradient(to right, transparent, var(--cert-frame));
+        }
+        .cert-divider::after {
+            background: linear-gradient(to left, transparent, var(--cert-frame));
+        }
+        .cert-divider span {
+            color: var(--cert-gold);
+            font-size: 18px;
+        }
+
+        /* タイトル */
+        .cert-title {
+            font-size: 38px;
+            font-weight: bold;
+            color: var(--cert-text);
+            letter-spacing: 3px;
+            margin: 8px 0 24px;
+            text-shadow: 0 0 20px rgba(133, 92, 249, 0.5);
+        }
+
+        /* 本文 */
+        .cert-body {
+            font-size: 15px;
+            color: var(--cert-sub);
+            line-height: 2;
+            margin-bottom: 8px;
+        }
+
+        /* 受賞者名 */
+        .cert-name {
+            font-size: 42px;
+            font-weight: bold;
+            color: var(--cert-text);
+            margin: 16px 0;
+            text-shadow: 0 0 30px rgba(133, 92, 249, 0.7);
+            border-bottom: 1px solid var(--cert-frame2);
+            padding-bottom: 16px;
+            display: inline-block;
+            min-width: 300px;
+        }
+
+        /* スタッツ */
+        .cert-stats {
+            display: flex;
+            justify-content: center;
+            gap: 48px;
+            margin: 32px 0;
+        }
+        .cert-stat {
+            text-align: center;
+        }
+        .cert-stat-value {
+            font-size: 32px;
+            font-weight: bold;
+            color: var(--cert-accent);
+        }
+        .cert-stat-label {
+            font-size: 11px;
+            letter-spacing: 2px;
+            color: var(--cert-sub);
+            text-transform: uppercase;
+            margin-top: 4px;
+        }
+
+        /* イベント日付 */
+        .cert-event-date {
+            font-size: 13px;
+            color: var(--cert-sub);
+            letter-spacing: 1px;
+            margin-bottom: 40px;
+        }
+
+        /* フッター（署名エリア） */
+        .cert-footer {
+            display: flex;
+            justify-content: space-around;
+            margin-top: 48px;
+            padding-top: 24px;
+            border-top: 1px solid var(--cert-frame2);
+        }
+        .cert-sign {
+            text-align: center;
+        }
+        .cert-sign-line {
+            width: 160px;
+            border-bottom: 1px solid var(--cert-sub);
+            margin: 0 auto 8px;
+            height: 36px;
+        }
+        .cert-sign-name {
+            font-size: 13px;
+            color: var(--cert-text);
+            font-weight: bold;
+        }
+        .cert-sign-title {
+            font-size: 11px;
+            color: var(--cert-sub);
+            letter-spacing: 1px;
+        }
+
+        /* 発行日 */
+        .cert-issued {
+            font-size: 12px;
+            color: var(--cert-sub);
+            margin-top: 24px;
+            letter-spacing: 1px;
+        }
+
+        /* ============================================================
+           アクションボタン（印刷時は非表示）
+           ============================================================ */
+        .cert-actions {
+            margin-top: 32px;
+            display: flex;
+            gap: 12px;
+            justify-content: center;
+        }
+        .cert-actions a,
+        .cert-actions button {
+            padding: 10px 24px;
+            border-radius: 6px;
+            font-size: 14px;
+            cursor: pointer;
+            text-decoration: none;
+            border: none;
+        }
+        .btn-print {
+            background: #855CF9;
+            color: #fff;
+        }
+        .btn-print:hover { background: #6d3de0; }
+        .btn-back {
+            background: transparent;
+            color: #855CF9;
+            border: 1px solid #855CF9 !important;
+        }
+        .btn-back:hover { background: rgba(133,92,249,0.1); }
+    </style>
+</head>
+<body>
+
+    <div class="cert-wrapper">
+        <span class="cert-corner-bl">✦</span>
+        <span class="cert-corner-br">✦</span>
+
+        {{-- ロゴを使う場合はここのコメントを外す --}}
+        {{-- <div class="cert-logo"><img src="/images/logo.png" alt="Logo" /></div> --}}
+
+        <div class="cert-ctf-name">@Model.CtfName</div>
+
+        <div class="cert-divider"><span>◈</span></div>
+
+        <div class="cert-title">Certificate of Achievement</div>
+
+        <p class="cert-body">以下の参加者がCTF競技において優秀な成績を収めたことを証します。</p>
+
+        <div>
+            <div class="cert-name">@Model.DisplayName</div>
+        </div>
+
+        <div class="cert-stats">
+            <div class="cert-stat">
+                <div class="cert-stat-value">@Model.Score</div>
+                <div class="cert-stat-label">Total Score</div>
+            </div>
+            <div class="cert-stat">
+                <div class="cert-stat-value">@Model.Rank <span style="font-size:16px;color:var(--cert-sub)">/ @Model.TotalParticipants</span></div>
+                <div class="cert-stat-label">Final Rank</div>
+            </div>
+            <div class="cert-stat">
+                <div class="cert-stat-value">@Model.SolvedCount</div>
+                <div class="cert-stat-label">Challenges Solved</div>
+            </div>
+        </div>
+
+        {{--
+            イベント日付 — ここをCTFの開催期間に変更する
+            例: 2025年1月1日 〜 2025年1月3日
+        --}}
+        <div class="cert-event-date">
+            Issued on @Model.IssuedAt.LocalDateTime.ToString("yyyy年MM月dd日")
+        </div>
+
+        <div class="cert-divider"><span>◈</span></div>
+
+        {{--
+            フッター署名エリア — 肩書き・名前をCTFに合わせて変更する
+        --}}
+        <div class="cert-footer">
+            <div class="cert-sign">
+                <div class="cert-sign-line"></div>
+                <div class="cert-sign-name">Organizer</div>
+                <div class="cert-sign-title">CTF Committee</div>
+            </div>
+            <div class="cert-sign">
+                <div class="cert-sign-line"></div>
+                <div class="cert-sign-name">@Model.CtfName</div>
+                <div class="cert-sign-title">Official Certificate</div>
+            </div>
+        </div>
+
+        <div class="cert-issued">
+            Certificate ID: @(Guid.NewGuid().ToString("N").Substring(0, 12).ToUpper())
+        </div>
+    </div>
+
+    <div class="cert-actions">
+        <button class="btn-print" onclick="window.print()">🖨️ PDFで保存 / 印刷</button>
+        <a class="btn-back" href="/">← ホームに戻る</a>
+    </div>
+
+</body>
+</html>
