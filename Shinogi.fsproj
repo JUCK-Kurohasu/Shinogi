@@ -13,7 +13,9 @@
     <Compile Include="Services/Scoring.fs" />
     <Compile Include="Services/Security.fs" />
     <Compile Include="Services/EmailService.fs" />
+    <Compile Include="Services/DockerChallengeFolders.fs" />
     <Compile Include="Services/InstanceManager.fs" />
+    <Compile Include="Services/InstanceSubdomainProxy.fs" />
     <Compile Include="ViewModels/ScoreEntry.fs" />
     <Compile Include="ViewModels/ProfileViewModels.fs" />
     <Compile Include="ViewModels/AdminViewModels.fs" />
@@ -35,6 +37,7 @@
     <PackageReference Include="Microsoft.AspNetCore.Mvc.Razor.RuntimeCompilation" Version="8.0.0" />
     <PackageReference Include="Microsoft.Extensions.Configuration.Binder" Version="8.0.0" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.6.2" />
+    <PackageReference Include="Yarp.ReverseProxy" Version="2.2.0" />
   </ItemGroup>
 
   <ItemGroup>

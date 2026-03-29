@@ -176,18 +176,27 @@ type ChallengesController(db: CtfdDbContext, userManager: UserManager<CtfdUser>,
                     this.TempData["Error"] <- "同時起動数の上限（3個）に達しています。既存のインスタンスを停止してください。"
                     return this.RedirectToAction("Index") :> IActionResult
                 else
-                    let publicUrl =
-                        let envUrl = System.Environment.GetEnvironmentVariable("SHINOGI_PUBLIC_URL")
-                        if String.IsNullOrWhiteSpace envUrl then "http://localhost" else envUrl
+                    let folder =
+                        if isNull challenge.InstanceDockerFolder then ""
+                        else challenge.InstanceDockerFolder.Trim()
+                    let legacyImg =
+                        if isNull challenge.InstanceImage then "" else challenge.InstanceImage.Trim()
+                    if String.IsNullOrWhiteSpace folder && String.IsNullOrWhiteSpace legacyImg then
+                        this.TempData["Error"] <- "このチャレンジに docker-challenges フォルダが設定されていません。管理者が編集画面でフォルダを選んでください。"
+                        return this.RedirectToAction("Index") :> IActionResult
+                    else
+                        let publicUrl =
+                            let envUrl = System.Environment.GetEnvironmentVariable("SHINOGI_PUBLIC_URL")
+                            if String.IsNullOrWhiteSpace envUrl then "http://localhost" else envUrl
 
-                    let! result = InstanceManager.createInstance db challenge user.Id publicUrl
-                    match result with
-                    | Ok instance ->
-                        this.TempData["Success"] <- $"インスタンスを起動しました: {instance.Url}"
-                        return this.RedirectToAction("Index") :> IActionResult
-                    | Error msg ->
-                        this.TempData["Error"] <- msg
-                        return this.RedirectToAction("Index") :> IActionResult
+                        let! result = InstanceManager.createInstance db challenge user.Id publicUrl env.ContentRootPath
+                        match result with
+                        | Ok instance ->
+                            this.TempData["Success"] <- $"インスタンスを起動しました: {instance.Url}"
+                            return this.RedirectToAction("Index") :> IActionResult
+                        | Error msg ->
+                            this.TempData["Error"] <- msg
+                            return this.RedirectToAction("Index") :> IActionResult
     }
 
     [<HttpPost>]

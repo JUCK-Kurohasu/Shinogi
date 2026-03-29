@@ -11,6 +11,7 @@ open Microsoft.AspNetCore.Routing
 open Microsoft.AspNetCore.Http
 open Microsoft.AspNetCore.Identity
 open Microsoft.AspNetCore.Hosting
+open Microsoft.AspNetCore.Routing
 open Microsoft.EntityFrameworkCore
 open Shinogi.Domain
 open Shinogi.Data
@@ -41,6 +42,21 @@ type AdminController(db: CtfdDbContext, userManager: UserManager<CtfdUser>, env:
         let! diffs = db.ChallengeDifficulties.OrderBy(fun d -> d.SortOrder).ThenBy(fun d -> d.Name).ToListAsync()
         return List<string>(diffs |> Seq.map (fun d -> d.Name))
     }
+
+    let listDockerChallengeFolders () =
+        DockerChallengeFolders.list env.ContentRootPath |> List<string>
+
+    /// インスタンス必須なら docker-challenges 内のフォルダ必須。戻り値は (InstanceDockerFolder, InstanceImage は常に空文字)。
+    let tryResolveInstanceFolder (requiresInstance: bool) (folderRaw: string) : Result<string, string> =
+        let folderTrim = if isNull folderRaw then "" else folderRaw.Trim()
+        if not requiresInstance then
+            Ok ""
+        elif String.IsNullOrWhiteSpace folderTrim then
+            Error "インスタンス必須のときは docker-challenges 内のフォルダを選択してください。"
+        else
+            let allowed = DockerChallengeFolders.list env.ContentRootPath |> Set.ofList
+            if allowed.Contains folderTrim then Ok folderTrim
+            else Error $"利用できないフォルダです: {folderTrim}"
 
     // ===== Challenges =====
 
@@ -83,11 +99,12 @@ type AdminController(db: CtfdDbContext, userManager: UserManager<CtfdUser>, env:
               Categories = cats
               Difficulties = diffs
               RequiresInstance = false
-              InstanceImage = ""
+              InstanceDockerFolder = ""
               InstancePort = Nullable()
-              InstanceLifetimeMinutes = 30
+              InstanceLifetimeMinutes = 15
               InstanceCpuLimit = "0.5"
-              InstanceMemoryLimit = "256m" }
+              InstanceMemoryLimit = "256m"
+              DockerChallengeFolders = listDockerChallengeFolders () }
         return this.View(model) :> IActionResult
     }
 
@@ -97,35 +114,41 @@ type AdminController(db: CtfdDbContext, userManager: UserManager<CtfdUser>, env:
             this.TempData["Error"] <- "Name and Category are required."
             return this.RedirectToAction("NewChallenge") :> IActionResult
         else
-            let releaseAt =
-                match DateTimeOffset.TryParse(dto.ReleaseAt) with
-                | true, d -> Some d
-                | _ -> None
-            let difficulty = if isNull dto.Difficulty then "" else dto.Difficulty.Trim()
-            let challenge =
-                { Id = Guid.NewGuid()
-                  Name = dto.Name.Trim()
-                  Category = dto.Category.Trim()
-                  Difficulty = difficulty
-                  Description = dto.Description
-                  ValueInitial = dto.ValueInitial
-                  ValueMinimum = dto.ValueMinimum
-                  Decay = dto.Decay
-                  Function = parseFunction dto.Function
-                  Logic = parseLogic dto.Logic
-                  MaxAttempts = if dto.MaxAttempts.HasValue then Some dto.MaxAttempts.Value else None
-                  Published = dto.Published
-                  ReleaseAt = releaseAt
-                  CreatedAt = DateTimeOffset.UtcNow
-                  RequiresInstance = dto.RequiresInstance
-                  InstanceImage = if isNull dto.InstanceImage then "" else dto.InstanceImage.Trim()
-                  InstancePort = if dto.InstancePort.HasValue then Some dto.InstancePort.Value else None
-                  InstanceLifetimeMinutes = dto.InstanceLifetimeMinutes
-                  InstanceCpuLimit = if isNull dto.InstanceCpuLimit then "0.5" else dto.InstanceCpuLimit.Trim()
-                  InstanceMemoryLimit = if isNull dto.InstanceMemoryLimit then "256m" else dto.InstanceMemoryLimit.Trim() }
-            db.Challenges.Add(challenge) |> ignore
-            let! _ = db.SaveChangesAsync()
-            return this.RedirectToAction("Challenges") :> IActionResult
+            match tryResolveInstanceFolder dto.RequiresInstance dto.InstanceDockerFolder with
+            | Error msg ->
+                this.TempData["Error"] <- msg
+                return this.RedirectToAction("NewChallenge") :> IActionResult
+            | Ok instanceFolder ->
+                let releaseAt =
+                    match DateTimeOffset.TryParse(dto.ReleaseAt) with
+                    | true, d -> Some d
+                    | _ -> None
+                let difficulty = if isNull dto.Difficulty then "" else dto.Difficulty.Trim()
+                let challenge =
+                    { Id = Guid.NewGuid()
+                      Name = dto.Name.Trim()
+                      Category = dto.Category.Trim()
+                      Difficulty = difficulty
+                      Description = dto.Description
+                      ValueInitial = dto.ValueInitial
+                      ValueMinimum = dto.ValueMinimum
+                      Decay = dto.Decay
+                      Function = parseFunction dto.Function
+                      Logic = parseLogic dto.Logic
+                      MaxAttempts = if dto.MaxAttempts.HasValue then Some dto.MaxAttempts.Value else None
+                      Published = dto.Published
+                      ReleaseAt = releaseAt
+                      CreatedAt = DateTimeOffset.UtcNow
+                      RequiresInstance = dto.RequiresInstance
+                      InstanceImage = ""
+                      InstanceDockerFolder = instanceFolder
+                      InstancePort = if dto.InstancePort.HasValue then Some dto.InstancePort.Value else None
+                      InstanceLifetimeMinutes = dto.InstanceLifetimeMinutes
+                      InstanceCpuLimit = if isNull dto.InstanceCpuLimit then "0.5" else dto.InstanceCpuLimit.Trim()
+                      InstanceMemoryLimit = if isNull dto.InstanceMemoryLimit then "256m" else dto.InstanceMemoryLimit.Trim() }
+                db.Challenges.Add(challenge) |> ignore
+                let! _ = db.SaveChangesAsync()
+                return this.RedirectToAction("Challenges") :> IActionResult
     }
 
     member this.EditChallenge(id: Guid) : Task<IActionResult> = task {
@@ -152,11 +175,12 @@ type AdminController(db: CtfdDbContext, userManager: UserManager<CtfdUser>, env:
                   Categories = cats
                   Difficulties = diffs
                   RequiresInstance = challenge.RequiresInstance
-                  InstanceImage = challenge.InstanceImage
+                  InstanceDockerFolder = challenge.InstanceDockerFolder
                   InstancePort = if challenge.InstancePort.IsSome then Nullable challenge.InstancePort.Value else Nullable()
                   InstanceLifetimeMinutes = challenge.InstanceLifetimeMinutes
                   InstanceCpuLimit = challenge.InstanceCpuLimit
-                  InstanceMemoryLimit = challenge.InstanceMemoryLimit }
+                  InstanceMemoryLimit = challenge.InstanceMemoryLimit
+                  DockerChallengeFolders = listDockerChallengeFolders () }
             return this.View(model) :> IActionResult
     }
 
@@ -166,36 +190,44 @@ type AdminController(db: CtfdDbContext, userManager: UserManager<CtfdUser>, env:
         if isNull existing then
             return this.NotFound() :> IActionResult
         else
-            let releaseAt =
-                match DateTimeOffset.TryParse(dto.ReleaseAt) with
-                | true, d -> Some d
-                | _ -> None
-            let difficulty = if isNull dto.Difficulty then "" else dto.Difficulty.Trim()
-            let updated =
-                { existing with
-                    Name = dto.Name.Trim()
-                    Category = dto.Category.Trim()
-                    Difficulty = difficulty
-                    Description = dto.Description
-                    ValueInitial = dto.ValueInitial
-                    ValueMinimum = dto.ValueMinimum
-                    Decay = dto.Decay
-                    Function = parseFunction dto.Function
-                    Logic = parseLogic dto.Logic
-                    MaxAttempts = if dto.MaxAttempts.HasValue then Some dto.MaxAttempts.Value else None
-                    Published = dto.Published
-                    ReleaseAt = releaseAt
-                    RequiresInstance = dto.RequiresInstance
-                    InstanceImage = if isNull dto.InstanceImage then "" else dto.InstanceImage.Trim()
-                    InstancePort = if dto.InstancePort.HasValue then Some dto.InstancePort.Value else None
-                    InstanceLifetimeMinutes = dto.InstanceLifetimeMinutes
-                    InstanceCpuLimit = if isNull dto.InstanceCpuLimit then "0.5" else dto.InstanceCpuLimit.Trim()
-                    InstanceMemoryLimit = if isNull dto.InstanceMemoryLimit then "256m" else dto.InstanceMemoryLimit.Trim() }
-            db.Entry(existing).State <- EntityState.Detached
-            db.Challenges.Update(updated) |> ignore
-            let! _ = db.SaveChangesAsync()
-            this.TempData["Success"] <- "チャレンジを更新しました。"
-            return this.RedirectToAction("Challenges") :> IActionResult
+            match tryResolveInstanceFolder dto.RequiresInstance dto.InstanceDockerFolder with
+            | Error msg ->
+                this.TempData["Error"] <- msg
+                let rv = RouteValueDictionary()
+                rv.Add("id", id)
+                return this.RedirectToAction("EditChallenge", "Admin", rv) :> IActionResult
+            | Ok instanceFolder ->
+                let releaseAt =
+                    match DateTimeOffset.TryParse(dto.ReleaseAt) with
+                    | true, d -> Some d
+                    | _ -> None
+                let difficulty = if isNull dto.Difficulty then "" else dto.Difficulty.Trim()
+                let updated =
+                    { existing with
+                        Name = dto.Name.Trim()
+                        Category = dto.Category.Trim()
+                        Difficulty = difficulty
+                        Description = dto.Description
+                        ValueInitial = dto.ValueInitial
+                        ValueMinimum = dto.ValueMinimum
+                        Decay = dto.Decay
+                        Function = parseFunction dto.Function
+                        Logic = parseLogic dto.Logic
+                        MaxAttempts = if dto.MaxAttempts.HasValue then Some dto.MaxAttempts.Value else None
+                        Published = dto.Published
+                        ReleaseAt = releaseAt
+                        RequiresInstance = dto.RequiresInstance
+                        InstanceImage = ""
+                        InstanceDockerFolder = instanceFolder
+                        InstancePort = if dto.InstancePort.HasValue then Some dto.InstancePort.Value else None
+                        InstanceLifetimeMinutes = dto.InstanceLifetimeMinutes
+                        InstanceCpuLimit = if isNull dto.InstanceCpuLimit then "0.5" else dto.InstanceCpuLimit.Trim()
+                        InstanceMemoryLimit = if isNull dto.InstanceMemoryLimit then "256m" else dto.InstanceMemoryLimit.Trim() }
+                db.Entry(existing).State <- EntityState.Detached
+                db.Challenges.Update(updated) |> ignore
+                let! _ = db.SaveChangesAsync()
+                this.TempData["Success"] <- "チャレンジを更新しました。"
+                return this.RedirectToAction("Challenges") :> IActionResult
     }
 
     [<HttpPost>]

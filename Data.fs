@@ -96,4 +96,5 @@ type CtfdDbContext(options: DbContextOptions<CtfdDbContext>) =
         builder.Entity<ChallengeInstance>().HasIndex("UserId") |> ignore
         builder.Entity<ChallengeInstance>().HasIndex("ChallengeId") |> ignore
         builder.Entity<ChallengeInstance>().HasIndex("Status") |> ignore
+        builder.Entity<ChallengeInstance>().HasIndex("AccessSlug") |> ignore
         builder.Entity<ChallengeInstance>().HasOne<Challenge>().WithMany().HasForeignKey("ChallengeId") |> ignore

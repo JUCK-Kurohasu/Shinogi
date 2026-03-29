@@ -98,9 +98,25 @@
             <span style="color:var(--primary-muted); font-size:14px;">Requires Instance (インスタンス起動が必要)</span>
         </div>
 
-        <label>Docker Image
-            <input name="InstanceImage" value="@Model.InstanceImage" placeholder="例: ctf-web-sqli:latest" />
-            <small style="color:var(--primary-muted);">Dockerイメージ名（例: ctf-web-sqli:latest）</small>
+        <label>docker-challenges フォルダ
+            <select name="InstanceDockerFolder">
+                <option value="">-- 選択 --</option>
+                @if (Model.DockerChallengeFolders != null)
+                {
+                    @foreach (var d in Model.DockerChallengeFolders)
+                    {
+                        if (d == Model.InstanceDockerFolder)
+                        {
+                            <option value="@d" selected>@d</option>
+                        }
+                        else
+                        {
+                            <option value="@d">@d</option>
+                        }
+                    }
+                }
+            </select>
+            <small style="color:var(--primary-muted);">インスタンス起動時に compose（優先）または Dockerfile でビルドします。</small>
         </label>
 
         <label>Container Port (optional)

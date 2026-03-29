@@ -30,11 +30,14 @@ type ChallengeEditViewModel =
     Categories: List<string>
     Difficulties: List<string>
     RequiresInstance: bool
-    InstanceImage: string
+    /// docker-challenges 直下のフォルダ名（ドロップダウン）
+    InstanceDockerFolder: string
     InstancePort: Nullable<int>
     InstanceLifetimeMinutes: int
     InstanceCpuLimit: string
-    InstanceMemoryLimit: string }
+    InstanceMemoryLimit: string
+    /// GET 時のみ: 選択肢
+    DockerChallengeFolders: List<string> }
 
 [<CLIMutable>]
 type FlagCreateViewModel =

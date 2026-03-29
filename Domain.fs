@@ -58,6 +58,8 @@ type Challenge =
     CreatedAt: DateTimeOffset
     RequiresInstance: bool
     InstanceImage: string
+    /// docker-challenges 直下のフォルダ名（例: web-sqli）。空のときは InstanceImage のレガシー動作。
+    InstanceDockerFolder: string
     InstancePort: int option
     InstanceLifetimeMinutes: int
     InstanceCpuLimit: string
@@ -111,7 +113,11 @@ type ChallengeInstance =
     ChallengeId: Guid
     UserId: Guid
     ContainerId: string
+    /// docker compose のプロジェクト名。空なら単一コンテナ docker run。
+    ComposeProject: string
     HostPort: int
+    /// SHINOGI_INSTANCE_HOST_SUFFIX 利用時のサブドメイン左側（例: quiet-ocean-a1b2）。未使用時は空。
+    AccessSlug: string
     Url: string
     Flag: string
     CreatedAt: DateTimeOffset

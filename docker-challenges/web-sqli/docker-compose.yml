@@ -1,0 +1,4 @@
+# Shinogi がホスト側ポート・FLAG・ネットワークを上書きします。メインサービス名は compose config --services の先頭が使われます。
+services:
+  challenge:
+    build: .

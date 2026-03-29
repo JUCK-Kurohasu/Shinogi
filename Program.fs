@@ -1,7 +1,9 @@
-﻿module Shinogi.Program
+module Shinogi.Program
 
 open System
 open System.IO
+open System.Net
+open System.Net.Http
 open System.Text
 open System.Threading.Tasks
 open System.Linq
@@ -25,6 +27,7 @@ open Shinogi.ViewModels
 open Shinogi.Services
 open Shinogi.Services.Scoring
 open Shinogi.Services.Security
+open Yarp.ReverseProxy
 
 let configureServices (builder: WebApplicationBuilder) =
     builder.Services.AddDbContext<CtfdDbContext>(
@@ -70,6 +73,17 @@ let configureServices (builder: WebApplicationBuilder) =
     builder.Services.AddControllersWithViews().AddRazorRuntimeCompilation() |> ignore
     builder.Services.AddEndpointsApiExplorer() |> ignore
     builder.Services.AddSwaggerGen() |> ignore
+    builder.Services.AddHttpForwarder() |> ignore
+    builder.Services.AddSingleton<HttpMessageInvoker>(fun _ ->
+        new HttpMessageInvoker(
+            new SocketsHttpHandler(
+                UseProxy = false,
+                AllowAutoRedirect = false,
+                AutomaticDecompression = DecompressionMethods.None,
+                UseCookies = false,
+                ConnectTimeout = TimeSpan.FromSeconds 60.
+            )
+        )) |> ignore
 
 let loadDotEnv (path: string) =
     if File.Exists(path) then
@@ -111,6 +125,8 @@ let issueJwt (config: Microsoft.Extensions.Configuration.IConfiguration) (user: 
     System.IdentityModel.Tokens.Jwt.JwtSecurityTokenHandler().WriteToken(token)
 
 let mapRoutes (app: WebApplication) =
+    InstanceSubdomainProxy.useInstanceSubdomainProxy app
+
     let requireTrustedHost (ctx: HttpContext) =
         let envHosts =
             let list = Environment.GetEnvironmentVariable("SHINOGI_TRUSTED_HOSTS")
@@ -225,8 +241,9 @@ let mapRoutes (app: WebApplication) =
                     CreatedAt = DateTimeOffset.UtcNow
                     RequiresInstance = false
                     InstanceImage = ""
+                    InstanceDockerFolder = ""
                     InstancePort = None
-                    InstanceLifetimeMinutes = 30
+                    InstanceLifetimeMinutes = 15
                     InstanceCpuLimit = "0.5"
                     InstanceMemoryLimit = "256m" }
                 db.Challenges.Add(challenge) |> ignore
@@ -587,11 +604,20 @@ let [<EntryPoint>] main args =
     db.Database.ExecuteSqlRaw(
         "DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='Challenges' AND column_name='InstancePort') THEN ALTER TABLE \"Challenges\" ADD COLUMN \"InstancePort\" integer; END IF; END $$;") |> ignore
     db.Database.ExecuteSqlRaw(
-        "DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='Challenges' AND column_name='InstanceLifetimeMinutes') THEN ALTER TABLE \"Challenges\" ADD COLUMN \"InstanceLifetimeMinutes\" integer NOT NULL DEFAULT 30; END IF; END $$;") |> ignore
+        "DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='Challenges' AND column_name='InstanceLifetimeMinutes') THEN ALTER TABLE \"Challenges\" ADD COLUMN \"InstanceLifetimeMinutes\" integer NOT NULL DEFAULT 15; END IF; END $$;") |> ignore
     db.Database.ExecuteSqlRaw(
         "DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='Challenges' AND column_name='InstanceCpuLimit') THEN ALTER TABLE \"Challenges\" ADD COLUMN \"InstanceCpuLimit\" text NOT NULL DEFAULT '0.5'; END IF; END $$;") |> ignore
     db.Database.ExecuteSqlRaw(
         "DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='Challenges' AND column_name='InstanceMemoryLimit') THEN ALTER TABLE \"Challenges\" ADD COLUMN \"InstanceMemoryLimit\" text NOT NULL DEFAULT '256m'; END IF; END $$;") |> ignore
+    db.Database.ExecuteSqlRaw(
+        "DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='Challenges' AND column_name='InstanceDockerFolder') THEN ALTER TABLE \"Challenges\" ADD COLUMN \"InstanceDockerFolder\" text NOT NULL DEFAULT ''; END IF; END $$;") |> ignore
+    db.Database.ExecuteSqlRaw(
+        "DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='ChallengeInstances' AND column_name='ComposeProject') THEN ALTER TABLE \"ChallengeInstances\" ADD COLUMN \"ComposeProject\" text NOT NULL DEFAULT ''; END IF; END $$;") |> ignore
+    db.Database.ExecuteSqlRaw(
+        "DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='ChallengeInstances' AND column_name='AccessSlug') THEN ALTER TABLE \"ChallengeInstances\" ADD COLUMN \"AccessSlug\" text NOT NULL DEFAULT ''; END IF; END $$;") |> ignore
+    db.Database.ExecuteSqlRaw(
+        "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_ChallengeInstances_AccessSlug_Running\" ON \"ChallengeInstances\" (\"AccessSlug\") WHERE \"Status\" = 'Running' AND \"AccessSlug\" <> '';") |> ignore
+    db.Database.ExecuteSqlRaw("ALTER TABLE \"Challenges\" ALTER COLUMN \"InstanceLifetimeMinutes\" SET DEFAULT 15;") |> ignore
 
     // カテゴリ・難易度の初期データ
     let seedMasters () =
@@ -827,8 +853,9 @@ let [<EntryPoint>] main args =
                               CreatedAt = DateTimeOffset.UtcNow
                               RequiresInstance = false
                               InstanceImage = ""
+                              InstanceDockerFolder = ""
                               InstancePort = None
-                              InstanceLifetimeMinutes = 30
+                              InstanceLifetimeMinutes = 15
                               InstanceCpuLimit = "0.5"
                               InstanceMemoryLimit = "256m" }
                         db.Challenges.Add(challenge) |> ignore
