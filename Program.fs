@@ -70,7 +70,12 @@ let configureServices (builder: WebApplicationBuilder) =
                 FixedWindowRateLimiterOptions(PermitLimit = 200, Window = TimeSpan.FromMinutes 1., QueueLimit = 50))))
         |> ignore
 
-    builder.Services.AddControllersWithViews().AddRazorRuntimeCompilation() |> ignore
+    // CSRF対策: Cookie認証のMVC POST/PUT/DELETE全てにAntiforgeryトークン検証を強制する。
+    // Razorのformタグヘルパーがトークンを自動注入するため既存フォーム・AJAX(FormData)はそのまま動作。
+    // Minimal API(JWT/チームトークン)はこのフィルタ対象外かつヘッダー認証のためCSRF非対象。
+    builder.Services.AddControllersWithViews(fun (options: MvcOptions) ->
+        options.Filters.Add(AutoValidateAntiforgeryTokenAttribute()) |> ignore)
+        .AddRazorRuntimeCompilation() |> ignore
     builder.Services.AddEndpointsApiExplorer() |> ignore
     builder.Services.AddSwaggerGen() |> ignore
     builder.Services.AddHttpForwarder() |> ignore
