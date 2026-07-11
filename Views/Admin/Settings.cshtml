@@ -3,8 +3,10 @@
     <h1>Admin</h1>
     <div class="tab-nav">
         <a asp-action="Challenges">Challenges</a>
+        <a asp-action="Submissions">Submissions</a>
         <a asp-action="Users">Users</a>
         <a asp-action="Teams">Teams</a>
+        <a asp-action="Notifications">Notifications</a>
         <a asp-action="Settings" class="active">Settings</a>
         <a asp-action="Categories">Categories</a>
         <a asp-action="Difficulties">Difficulties</a>
@@ -22,6 +24,13 @@
         </label>
         <p style="font-size:12px; color:var(--primary-muted); margin:0;">
             設定するとイベント期間外はチャレンジ一覧やフラグ提出が制限されます。空欄で制限なし。
+        </p>
+        <label>
+            スコアボード凍結時刻
+            <input type="datetime-local" name="FreezeAt" value="@Model.FreezeAt" />
+        </label>
+        <p style="font-size:12px; color:var(--primary-muted); margin:0;">
+            設定するとこの時刻以降の提出は公開スコアボードに反映されません（終盤の順位隠し）。空欄で凍結なし。
         </p>
 
         <h3 style="margin:24px 0 8px; color:var(--text-white);">テーマプリセット</h3>

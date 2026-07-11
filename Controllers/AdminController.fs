@@ -300,6 +300,65 @@ type AdminController(db: CtfdDbContext, userManager: UserManager<CtfdUser>, env:
         return this.RedirectToAction("Flags", {| id = id |}) :> IActionResult
     }
 
+    // ===== Hints =====
+
+    member this.Hints(id: Guid) : Task<IActionResult> = task {
+        let! challenge = db.Challenges.FirstOrDefaultAsync(fun c -> c.Id = id)
+        if isNull challenge then
+            return this.NotFound() :> IActionResult
+        else
+            let! hints = db.Hints.Where(fun h -> h.ChallengeId = id).OrderBy(fun h -> h.SortOrder).ThenBy(fun h -> h.Cost).ToListAsync()
+            let hintIds = hints |> Seq.map (fun h -> h.Id) |> Seq.toArray
+            let! unlockCounts =
+                if hintIds.Length = 0 then
+                    Task.FromResult(List<HintUnlock>())
+                else
+                    db.HintUnlocks.Where(fun u -> hintIds.Contains(u.HintId)).ToListAsync()
+            let countByHint =
+                unlockCounts
+                |> Seq.groupBy (fun u -> u.HintId)
+                |> Seq.map (fun (hid, us) -> hid, Seq.length us)
+                |> dict
+            this.ViewData["ChallengeName"] <- challenge.Name
+            this.ViewData["ChallengeId"] <- challenge.Id.ToString()
+            this.ViewData["UnlockCounts"] <- countByHint
+            return this.View(hints) :> IActionResult
+    }
+
+    [<HttpPost>]
+    member this.AddHint(id: Guid, dto: HintCreateViewModel) : Task<IActionResult> = task {
+        if String.IsNullOrWhiteSpace dto.Content then
+            this.TempData["Error"] <- "ヒント内容を入力してください。"
+            return this.RedirectToAction("Hints", {| id = id |}) :> IActionResult
+        else
+            let! challenge = db.Challenges.FirstOrDefaultAsync(fun c -> c.Id = id)
+            if isNull challenge then
+                return this.NotFound() :> IActionResult
+            else
+                let hint =
+                    { Id = Guid.NewGuid()
+                      ChallengeId = id
+                      Content = dto.Content.Trim()
+                      Cost = max 0 dto.Cost
+                      SortOrder = dto.SortOrder }
+                db.Hints.Add(hint) |> ignore
+                let! _ = db.SaveChangesAsync()
+                this.TempData["Success"] <- "ヒントを追加しました。"
+                return this.RedirectToAction("Hints", {| id = id |}) :> IActionResult
+    }
+
+    [<HttpPost>]
+    member this.DeleteHint(id: Guid, hintId: Guid) : Task<IActionResult> = task {
+        let! hint = db.Hints.FirstOrDefaultAsync(fun h -> h.Id = hintId && h.ChallengeId = id)
+        if not (isNull hint) then
+            db.Hints.Remove(hint) |> ignore
+            let! _ = db.SaveChangesAsync()
+            this.TempData["Success"] <- "ヒントを削除しました。開放済みユーザーのコスト減算は維持されます。"
+        else
+            this.TempData["Error"] <- "ヒントが見つかりません。"
+        return this.RedirectToAction("Hints", {| id = id |}) :> IActionResult
+    }
+
     // ===== Challenge Files =====
 
     member this.Files(id: Guid) : Task<IActionResult> = task {
@@ -435,6 +494,8 @@ type AdminController(db: CtfdDbContext, userManager: UserManager<CtfdUser>, env:
                 db.TeamMembers.Remove(memberRow) |> ignore
             let! submissions = db.Submissions.Where(fun s -> s.AccountId = user.Id).ToListAsync()
             db.Submissions.RemoveRange(submissions) |> ignore
+            let! unlocks = db.HintUnlocks.Where(fun u -> u.AccountId = user.Id).ToListAsync()
+            db.HintUnlocks.RemoveRange(unlocks) |> ignore
             let! _ = db.SaveChangesAsync()
             let! _ = userManager.DeleteAsync(user)
             ()
@@ -622,10 +683,11 @@ type AdminController(db: CtfdDbContext, userManager: UserManager<CtfdUser>, env:
         let! settings = db.CtfSettings.FirstOrDefaultAsync()
         let vm =
             if isNull settings then
-                { EventStart = ""; EventEnd = ""; ThemePreset = "purple-network" } : CtfSettingsViewModel
+                { EventStart = ""; EventEnd = ""; FreezeAt = ""; ThemePreset = "purple-network" } : CtfSettingsViewModel
             else
                 { EventStart = match settings.EventStart with | Some d -> d.ToLocalTime().ToString("yyyy-MM-ddTHH:mm") | None -> ""
                   EventEnd = match settings.EventEnd with | Some d -> d.ToLocalTime().ToString("yyyy-MM-ddTHH:mm") | None -> ""
+                  FreezeAt = match settings.FreezeAt with | Some d -> d.ToLocalTime().ToString("yyyy-MM-ddTHH:mm") | None -> ""
                   ThemePreset = if String.IsNullOrWhiteSpace settings.ThemePreset then "purple-network" else settings.ThemePreset }
         return this.View(vm) :> IActionResult
     }
@@ -641,16 +703,21 @@ type AdminController(db: CtfdDbContext, userManager: UserManager<CtfdUser>, env:
             match DateTimeOffset.TryParse(dto.EventEnd) with
             | true, d -> Some d
             | _ -> None
+        let freezeAt =
+            match DateTimeOffset.TryParse(dto.FreezeAt) with
+            | true, d -> Some d
+            | _ -> None
         let themePreset = if String.IsNullOrWhiteSpace dto.ThemePreset then "purple-network" else dto.ThemePreset.Trim()
         if isNull existing then
             let newSettings =
                 { Id = Guid.NewGuid()
                   EventStart = eventStart
                   EventEnd = eventEnd
+                  FreezeAt = freezeAt
                   ThemePreset = themePreset }
             db.CtfSettings.Add(newSettings) |> ignore
         else
-            let updated = { existing with EventStart = eventStart; EventEnd = eventEnd; ThemePreset = themePreset }
+            let updated = { existing with EventStart = eventStart; EventEnd = eventEnd; FreezeAt = freezeAt; ThemePreset = themePreset }
             db.Entry(existing).State <- EntityState.Detached
             db.CtfSettings.Update(updated) |> ignore
         let! _ = db.SaveChangesAsync()
@@ -750,6 +817,85 @@ type AdminController(db: CtfdDbContext, userManager: UserManager<CtfdUser>, env:
         return this.RedirectToAction("Difficulties") :> IActionResult
     }
 
+    // ===== Submissions Log =====
+
+    member this.Submissions() : Task<IActionResult> = task {
+        // 直近500件の提出履歴を表示
+        let! subs =
+            db.Submissions
+              .OrderByDescending(fun s -> s.SubmittedAt)
+              .Take(500)
+              .ToListAsync()
+        let accountIds = subs |> Seq.map (fun s -> s.AccountId) |> Seq.distinct |> Seq.toArray
+        let challengeIds = subs |> Seq.map (fun s -> s.ChallengeId) |> Seq.distinct |> Seq.toArray
+        let! users =
+            if accountIds.Length = 0 then
+                Task.FromResult(List<CtfdUser>())
+            else
+                userManager.Users.Where(fun u -> accountIds.Contains u.Id).ToListAsync()
+        let! challs =
+            if challengeIds.Length = 0 then
+                Task.FromResult(List<Challenge>())
+            else
+                db.Challenges.Where(fun c -> challengeIds.Contains c.Id).ToListAsync()
+        let userById = users |> Seq.map (fun u -> u.Id, u) |> dict
+        let challById = challs |> Seq.map (fun c -> c.Id, c) |> dict
+        let model =
+            subs
+            |> Seq.map (fun s ->
+                let userDisplay =
+                    match userById.TryGetValue(s.AccountId) with
+                    | true, u -> if String.IsNullOrWhiteSpace u.DisplayName then u.Email else u.DisplayName
+                    | _ -> "（削除済み）"
+                let challengeName =
+                    match challById.TryGetValue(s.ChallengeId) with
+                    | true, c -> c.Name
+                    | _ -> "（削除済み）"
+                { Id = s.Id
+                  SubmittedAt = s.SubmittedAt
+                  UserDisplay = userDisplay
+                  ChallengeName = challengeName
+                  IsCorrect = s.IsCorrect
+                  ValueAwarded = s.ValueAwarded
+                  Ip = s.Ip })
+            |> List<SubmissionAdminViewModel>
+        return this.View(model) :> IActionResult
+    }
+
+    // ===== Notifications =====
+
+    member this.Notifications() : Task<IActionResult> = task {
+        let! items = db.Notifications.OrderByDescending(fun n -> n.CreatedAt).ToListAsync()
+        return this.View(items) :> IActionResult
+    }
+
+    [<HttpPost>]
+    member this.AddNotification(title: string, content: string) : Task<IActionResult> = task {
+        if String.IsNullOrWhiteSpace title then
+            this.TempData["Error"] <- "タイトルを入力してください。"
+            return this.RedirectToAction("Notifications") :> IActionResult
+        else
+            let notification =
+                { Id = Guid.NewGuid()
+                  Title = title.Trim()
+                  Content = if isNull content then "" else content.Trim()
+                  CreatedAt = DateTimeOffset.UtcNow }
+            db.Notifications.Add(notification) |> ignore
+            let! _ = db.SaveChangesAsync()
+            this.TempData["Success"] <- "通知を配信しました。"
+            return this.RedirectToAction("Notifications") :> IActionResult
+    }
+
+    [<HttpPost>]
+    member this.DeleteNotification(id: Guid) : Task<IActionResult> = task {
+        let! item = db.Notifications.FirstOrDefaultAsync(fun n -> n.Id = id)
+        if not (isNull item) then
+            db.Notifications.Remove(item) |> ignore
+            let! _ = db.SaveChangesAsync()
+            this.TempData["Success"] <- "通知を削除しました。"
+        return this.RedirectToAction("Notifications") :> IActionResult
+    }
+
     // ===== データリセット =====
 
     [<HttpPost>]
@@ -758,11 +904,13 @@ type AdminController(db: CtfdDbContext, userManager: UserManager<CtfdUser>, env:
         let! currentUser = userManager.GetUserAsync(adminUser)
         let currentUserId = if isNull currentUser then Guid.Empty else currentUser.Id
 
-        // 提出データは常にリセット
+        // 提出データ・ヒント開放記録は常にリセット（どちらもスコアの構成要素）
         db.Submissions.RemoveRange(db.Submissions) |> ignore
+        db.HintUnlocks.RemoveRange(db.HintUnlocks) |> ignore
 
         if resetChallenges then
             db.Flags.RemoveRange(db.Flags) |> ignore
+            db.Hints.RemoveRange(db.Hints) |> ignore
             db.ChallengeFiles.RemoveRange(db.ChallengeFiles) |> ignore
             db.Challenges.RemoveRange(db.Challenges) |> ignore
 

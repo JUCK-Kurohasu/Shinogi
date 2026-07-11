@@ -1,0 +1,48 @@
+@model System.Collections.Generic.List<Shinogi.ViewModels.SubmissionAdminViewModel>
+<section>
+    <h1>Admin</h1>
+    <div class="tab-nav">
+        <a asp-action="Challenges">Challenges</a>
+        <a asp-action="Submissions" class="active">Submissions</a>
+        <a asp-action="Users">Users</a>
+        <a asp-action="Teams">Teams</a>
+        <a asp-action="Notifications">Notifications</a>
+        <a asp-action="Settings">Settings</a>
+        <a asp-action="Categories">Categories</a>
+        <a asp-action="Difficulties">Difficulties</a>
+    </div>
+
+    <h2>提出ログ（直近500件）</h2>
+    <table class="table">
+        <thead><tr><th>提出日時</th><th>ユーザー</th><th>チャレンジ</th><th>結果</th><th>獲得pt</th><th>IP</th></tr></thead>
+        <tbody>
+        @if (Model.Count == 0)
+        {
+            <tr><td colspan="6" class="coming-soon">提出はまだありません。</td></tr>
+        }
+        else
+        {
+            foreach (var s in Model)
+            {
+                <tr>
+                    <td style="white-space:nowrap;">@s.SubmittedAt.ToLocalTime().ToString("MM-dd HH:mm:ss")</td>
+                    <td>@s.UserDisplay</td>
+                    <td>@s.ChallengeName</td>
+                    <td>
+                        @if (s.IsCorrect)
+                        {
+                            <span class="badge-owner">正解</span>
+                        }
+                        else
+                        {
+                            <span class="badge-player">不正解</span>
+                        }
+                    </td>
+                    <td>@(s.IsCorrect ? s.ValueAwarded.ToString() : "-")</td>
+                    <td><code style="font-size:12px;">@s.Ip</code></td>
+                </tr>
+            }
+        }
+        </tbody>
+    </table>
+</section>

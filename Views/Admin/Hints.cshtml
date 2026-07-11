@@ -1,0 +1,45 @@
+@model System.Collections.Generic.List<Shinogi.Domain.Hint>
+@{
+    var unlockCounts = ViewData["UnlockCounts"] as System.Collections.Generic.IDictionary<Guid, int>
+        ?? new System.Collections.Generic.Dictionary<Guid, int>();
+}
+<section>
+    <h1>Hints</h1>
+    <p><strong>Challenge:</strong> @ViewData["ChallengeName"]</p>
+
+    <form method="post" asp-action="AddHint" asp-route-id="@ViewData["ChallengeId"]" class="form form-wide">
+        <label>ヒント内容<textarea name="Content" rows="3" required></textarea></label>
+        <label>コスト（開放時にスコアから減算されるポイント。0 で無料）<input name="Cost" type="number" min="0" value="0" /></label>
+        <label>表示順<input name="SortOrder" type="number" value="0" /></label>
+        <button type="submit">Add Hint</button>
+    </form>
+
+    <h2 style="margin-top:24px;">Stored Hints</h2>
+    <table class="table">
+        <thead><tr><th>順</th><th>内容</th><th>コスト</th><th>開放数</th><th>操作</th></tr></thead>
+        <tbody>
+        @if (Model.Count == 0)
+        {
+            <tr><td colspan="5" class="coming-soon">ヒントが登録されていません。</td></tr>
+        }
+        else
+        {
+            foreach (var h in Model)
+            {
+                <tr>
+                    <td>@h.SortOrder</td>
+                    <td style="white-space:pre-wrap;">@h.Content</td>
+                    <td>@(h.Cost > 0 ? $"-{h.Cost} pt" : "無料")</td>
+                    <td>@(unlockCounts.TryGetValue(h.Id, out var cnt) ? cnt : 0)</td>
+                    <td>
+                        <form method="post" asp-action="DeleteHint" asp-route-id="@ViewData["ChallengeId"]" asp-route-hintId="@h.Id" style="display:inline;" onsubmit="return confirm('このヒントを削除しますか？開放済みユーザーのコスト減算は維持されます。')">
+                            <button type="submit" class="btn-danger" style="padding:4px 10px; font-size:12px;">Delete</button>
+                        </form>
+                    </td>
+                </tr>
+            }
+        }
+        </tbody>
+    </table>
+    <p style="margin-top:16px;"><a asp-action="Challenges">&larr; Back</a></p>
+</section>

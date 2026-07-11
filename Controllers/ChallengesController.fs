@@ -21,6 +21,15 @@ type ChallengesController(db: CtfdDbContext, userManager: UserManager<CtfdUser>,
 
     member this.Index() : Task<IActionResult> = task {
         let now = DateTimeOffset.UtcNow
+        // イベント開始前はチャレンジを公開しない
+        let! eventState = CtfTime.getEventState db
+        match eventState with
+        | CtfTime.NotStarted start ->
+            this.ViewData["EventNotStarted"] <- start.ToLocalTime().ToString("yyyy-MM-dd HH:mm")
+            return this.View(System.Collections.Generic.List<Challenge>()) :> IActionResult
+        | _ ->
+        if (match eventState with | CtfTime.Ended _ -> true | _ -> false) then
+            this.ViewData["EventEnded"] <- true
         let! allPublished =
             db.Challenges
               .Where(fun c -> c.Published)
@@ -29,10 +38,7 @@ type ChallengesController(db: CtfdDbContext, userManager: UserManager<CtfdUser>,
               .ToListAsync()
         let challenges =
             allPublished
-            |> Seq.filter (fun c ->
-                match c.ReleaseAt with
-                | Some releaseAt -> releaseAt <= now
-                | None -> true)
+            |> Seq.filter (CtfTime.isReleased now)
             |> System.Collections.Generic.List
         let challengeIds = challenges |> Seq.map (fun c -> c.Id) |> Seq.toArray
         let filesByChallenge = Dictionary<Guid, List<ChallengeFile>>()
@@ -93,7 +99,76 @@ type ChallengesController(db: CtfdDbContext, userManager: UserManager<CtfdUser>,
                     userInstances.[inst.ChallengeId] <- inst
         this.ViewData["UserInstances"] <- userInstances
 
+        // ヒント一覧とユーザーの開放状況を取得
+        let hintsByChallenge = Dictionary<Guid, List<Hint>>()
+        let unlockedHintIds = HashSet<Guid>()
+        if challengeIds.Length > 0 then
+            let! allHints =
+                db.Hints
+                  .Where(fun h -> challengeIds.Contains(h.ChallengeId))
+                  .OrderBy(fun h -> h.SortOrder)
+                  .ThenBy(fun h -> h.Cost)
+                  .ToListAsync()
+            for (cid, hs) in allHints |> Seq.groupBy (fun h -> h.ChallengeId) do
+                hintsByChallenge.[cid] <- List<Hint>(hs)
+            if this.User.Identity <> null && this.User.Identity.IsAuthenticated then
+                let! user = userManager.GetUserAsync(this.User)
+                if not (isNull user) then
+                    let! unlocked =
+                        db.HintUnlocks
+                          .Where(fun u -> u.AccountId = user.Id)
+                          .Select(fun u -> u.HintId)
+                          .ToListAsync()
+                    for hid in unlocked do
+                        unlockedHintIds.Add(hid) |> ignore
+        this.ViewData["HintsByChallenge"] <- hintsByChallenge
+        this.ViewData["UnlockedHints"] <- unlockedHintIds
+
         return this.View(challenges) :> IActionResult
+    }
+
+    [<HttpPost>]
+    [<Authorize>]
+    member this.UnlockHint(id: Guid, hintId: Guid) : Task<IActionResult> = task {
+        let! user = userManager.GetUserAsync(this.User)
+        if isNull user then
+            return this.RedirectToAction("Login", "Account") :> IActionResult
+        else
+            let! submittable = CtfTime.checkSubmittable db
+            match submittable with
+            | Error msg ->
+                this.TempData["Error"] <- msg
+                return this.RedirectToAction("Index") :> IActionResult
+            | Ok () ->
+            let! challenge = db.Challenges.FirstOrDefaultAsync(fun c -> c.Id = id && c.Published)
+            if isNull challenge || not (CtfTime.isReleased DateTimeOffset.UtcNow challenge) then
+                this.TempData["Error"] <- "チャレンジが見つかりません。"
+                return this.RedirectToAction("Index") :> IActionResult
+            else
+                let! hint = db.Hints.FirstOrDefaultAsync(fun h -> h.Id = hintId && h.ChallengeId = id)
+                if isNull hint then
+                    this.TempData["Error"] <- "ヒントが見つかりません。"
+                    return this.RedirectToAction("Index") :> IActionResult
+                else
+                    let! already = db.HintUnlocks.AnyAsync(fun u -> u.HintId = hintId && u.AccountId = user.Id)
+                    if already then
+                        this.TempData["Info"] <- "このヒントは既に開放済みです。"
+                        return this.RedirectToAction("Index") :> IActionResult
+                    else
+                        let unlock =
+                            { Id = Guid.NewGuid()
+                              HintId = hint.Id
+                              ChallengeId = id
+                              AccountId = user.Id
+                              Cost = hint.Cost
+                              UnlockedAt = DateTimeOffset.UtcNow }
+                        db.HintUnlocks.Add(unlock) |> ignore
+                        let! _ = db.SaveChangesAsync()
+                        if hint.Cost > 0 then
+                            this.TempData["Success"] <- $"ヒントを開放しました（スコアから {hint.Cost} pt 減算されます）。"
+                        else
+                            this.TempData["Success"] <- "ヒントを開放しました。"
+                        return this.RedirectToAction("Index") :> IActionResult
     }
 
     [<HttpPost>]
@@ -103,8 +178,14 @@ type ChallengesController(db: CtfdDbContext, userManager: UserManager<CtfdUser>,
         if isNull user then
             return this.RedirectToAction("Login", "Account") :> IActionResult
         else
+            let! submittable = CtfTime.checkSubmittable db
+            match submittable with
+            | Error msg ->
+                this.TempData["Error"] <- msg
+                return this.RedirectToAction("Index") :> IActionResult
+            | Ok () ->
             let! challenge = db.Challenges.FirstOrDefaultAsync(fun c -> c.Id = id && c.Published)
-            if isNull challenge then
+            if isNull challenge || not (CtfTime.isReleased DateTimeOffset.UtcNow challenge) then
                 this.TempData["Error"] <- "チャレンジが見つかりません。"
                 return this.RedirectToAction("Index") :> IActionResult
             else
@@ -147,6 +228,11 @@ type ChallengesController(db: CtfdDbContext, userManager: UserManager<CtfdUser>,
     }
 
     member this.DownloadFile(id: Guid, fileId: Guid) : Task<IActionResult> = task {
+        // 未公開・未リリースのチャレンジの配布ファイルは取得不可
+        let! challenge = db.Challenges.FirstOrDefaultAsync(fun c -> c.Id = id && c.Published)
+        if isNull challenge || not (CtfTime.isReleased DateTimeOffset.UtcNow challenge) then
+            return this.NotFound() :> IActionResult
+        else
         let! file = db.ChallengeFiles.FirstOrDefaultAsync(fun f -> f.Id = fileId && f.ChallengeId = id)
         if isNull file then
             return this.NotFound() :> IActionResult
@@ -166,6 +252,12 @@ type ChallengesController(db: CtfdDbContext, userManager: UserManager<CtfdUser>,
         if isNull user then
             return this.RedirectToAction("Login", "Account") :> IActionResult
         else
+            let! submittable = CtfTime.checkSubmittable db
+            match submittable with
+            | Error msg ->
+                this.TempData["Error"] <- msg
+                return this.RedirectToAction("Index") :> IActionResult
+            | Ok () ->
             let! challenge = db.Challenges.FirstOrDefaultAsync(fun c -> c.Id = id && c.Published && c.RequiresInstance)
             if isNull challenge then
                 this.TempData["Error"] <- "チャレンジが見つかりません。"
