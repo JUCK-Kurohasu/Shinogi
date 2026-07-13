@@ -35,12 +35,17 @@ type ProfileController(userManager: UserManager<CtfdUser>, db: CtfdDbContext) =
                 | Some t -> t.Name
                 | None -> ""
 
-            // ユーザーのスコア情報を取得
+            // ユーザーのスコア情報を取得（開放ヒントのコストを減算）
             let! userSubmissions =
                 db.Submissions
                   .Where(fun s -> s.AccountId = user.Id && s.IsCorrect)
                   .ToListAsync()
-            let totalScore = userSubmissions |> Seq.sumBy (fun s -> s.ValueAwarded)
+            let! userUnlocks =
+                db.HintUnlocks
+                  .Where(fun u -> u.AccountId = user.Id)
+                  .ToListAsync()
+            let hintSpent = userUnlocks |> Seq.sumBy (fun u -> u.Cost)
+            let totalScore = (userSubmissions |> Seq.sumBy (fun s -> s.ValueAwarded)) - hintSpent
             let solvedCount =
                 userSubmissions
                 |> Seq.map (fun s -> s.ChallengeId)
@@ -161,12 +166,17 @@ type ProfileController(userManager: UserManager<CtfdUser>, db: CtfdDbContext) =
                     |> List<TeamMemberViewModel>
                 let isOwner = memberRow.Role = MemberRole.Owner
 
-                // チームのスコア情報を取得
+                // チームのスコア情報を取得（開放ヒントのコストを減算）
                 let! teamSubmissions =
                     db.Submissions
                       .Where(fun s -> s.IsCorrect && userIds.Contains(s.AccountId))
                       .ToListAsync()
-                let teamScore = teamSubmissions |> Seq.sumBy (fun s -> s.ValueAwarded)
+                let! teamUnlocks =
+                    db.HintUnlocks
+                      .Where(fun u -> userIds.Contains(u.AccountId))
+                      .ToListAsync()
+                let teamHintSpent = teamUnlocks |> Seq.sumBy (fun u -> u.Cost)
+                let teamScore = (teamSubmissions |> Seq.sumBy (fun s -> s.ValueAwarded)) - teamHintSpent
                 let teamSolvedCount =
                     teamSubmissions
                     |> Seq.map (fun s -> s.ChallengeId)

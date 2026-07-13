@@ -45,6 +45,12 @@ type FlagCreateViewModel =
     CaseSensitive: bool }
 
 [<CLIMutable>]
+type HintCreateViewModel =
+  { Content: string
+    Cost: int
+    SortOrder: int }
+
+[<CLIMutable>]
 type UserAdminViewModel =
   { Id: Guid
     Email: string
@@ -84,6 +90,7 @@ type TeamMemberAddViewModel =
 type CtfSettingsViewModel =
   { EventStart: string
     EventEnd: string
+    FreezeAt: string
     ThemePreset: string }
 
 [<CLIMutable>]
@@ -91,3 +98,13 @@ type MasterItemViewModel =
   { Id: Guid
     Name: string
     SortOrder: int }
+
+[<CLIMutable>]
+type SubmissionAdminViewModel =
+  { Id: Guid
+    SubmittedAt: DateTimeOffset
+    UserDisplay: string
+    ChallengeName: string
+    IsCorrect: bool
+    ValueAwarded: int
+    Ip: string }

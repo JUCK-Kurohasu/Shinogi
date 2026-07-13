@@ -129,4 +129,33 @@ type CtfSettings =
   { Id: Guid
     EventStart: DateTimeOffset option
     EventEnd: DateTimeOffset option
+    /// スコアボード凍結時刻。以降の提出は公開スコアボードに反映されない。
+    FreezeAt: DateTimeOffset option
     ThemePreset: string }
+
+/// チャレンジのヒント。Cost > 0 の場合、開放したユーザーのスコアからコストが減算される。
+[<CLIMutable>]
+type Hint =
+  { Id: Guid
+    ChallengeId: Guid
+    Content: string
+    Cost: int
+    SortOrder: int }
+
+/// ユーザーがヒントを開放した記録。スコア集計時に Cost を減算するために使う。
+[<CLIMutable>]
+type HintUnlock =
+  { Id: Guid
+    HintId: Guid
+    ChallengeId: Guid
+    AccountId: Guid
+    Cost: int
+    UnlockedAt: DateTimeOffset }
+
+/// 運営からの全体通知（アナウンス）。
+[<CLIMutable>]
+type Notification =
+  { Id: Guid
+    Title: string
+    Content: string
+    CreatedAt: DateTimeOffset }

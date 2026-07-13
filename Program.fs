@@ -70,7 +70,12 @@ let configureServices (builder: WebApplicationBuilder) =
                 FixedWindowRateLimiterOptions(PermitLimit = 200, Window = TimeSpan.FromMinutes 1., QueueLimit = 50))))
         |> ignore
 
-    builder.Services.AddControllersWithViews().AddRazorRuntimeCompilation() |> ignore
+    // CSRF対策: Cookie認証のMVC POST/PUT/DELETE全てにAntiforgeryトークン検証を強制する。
+    // Razorのformタグヘルパーがトークンを自動注入するため既存フォーム・AJAX(FormData)はそのまま動作。
+    // Minimal API(JWT/チームトークン)はこのフィルタ対象外かつヘッダー認証のためCSRF非対象。
+    builder.Services.AddControllersWithViews(fun (options: MvcOptions) ->
+        options.Filters.Add(AutoValidateAntiforgeryTokenAttribute()) |> ignore)
+        .AddRazorRuntimeCompilation() |> ignore
     builder.Services.AddEndpointsApiExplorer() |> ignore
     builder.Services.AddSwaggerGen() |> ignore
     builder.Services.AddHttpForwarder() |> ignore
@@ -205,11 +210,41 @@ let mapRoutes (app: WebApplication) =
 
     // ===== Challenges API =====
     let challenges = app.MapGroup("/api/v1/challenges")
-    challenges.MapGet("/", Func<CtfdDbContext, IResult>(fun db ->
-        db.Challenges
-          .Where(fun c -> c.Published)
-          .OrderBy(fun c -> c.CreatedAt)
-          |> Results.Ok)) |> ignore
+    challenges.MapGet("/", Func<CtfdDbContext, Task<IResult>>(fun db ->
+        task {
+            let! eventState = CtfTime.getEventState db
+            match eventState with
+            | CtfTime.NotStarted _ ->
+                // イベント開始前はチャレンジを公開しない
+                return Results.Ok(List.empty<obj>)
+            | _ ->
+                let now = DateTimeOffset.UtcNow
+                let! items =
+                    db.Challenges
+                      .Where(fun c -> c.Published)
+                      .OrderBy(fun c -> c.CreatedAt)
+                      .ToListAsync()
+                // Challenge 型は判別共用体を含み JSON シリアライズできないため匿名型に射影する
+                let payload =
+                    items
+                    |> Seq.filter (CtfTime.isReleased now)
+                    |> Seq.map (fun c ->
+                        box {| id = c.Id
+                               name = c.Name
+                               category = c.Category
+                               difficulty = c.Difficulty
+                               description = c.Description
+                               valueInitial = c.ValueInitial
+                               valueMinimum = c.ValueMinimum
+                               decay = c.Decay
+                               func = c.Function.ToString()
+                               logic = c.Logic.ToString()
+                               maxAttempts = (match c.MaxAttempts with | Some m -> Nullable m | None -> Nullable())
+                               requiresInstance = c.RequiresInstance
+                               createdAt = c.CreatedAt |})
+                    |> Seq.toList
+                return Results.Ok(payload)
+        } :> Task<IResult>)) |> ignore
 
     let challengeCreateHandler =
         challenges.MapPost("/", Func<ChallengeCreateDto, CtfdDbContext, Task<IResult>>(fun dto db ->
@@ -248,7 +283,10 @@ let mapRoutes (app: WebApplication) =
                     InstanceMemoryLimit = "256m" }
                 db.Challenges.Add(challenge) |> ignore
                 let! _ = db.SaveChangesAsync()
-                return Results.Created($"/api/v1/challenges/{challenge.Id}", challenge)
+                // Challenge 型は判別共用体を含み JSON シリアライズできないため匿名型で返す
+                return Results.Created(
+                    $"/api/v1/challenges/{challenge.Id}",
+                    box {| id = challenge.Id; name = challenge.Name; category = challenge.Category |})
             } :> Task<IResult>))
     challengeCreateHandler.RequireAuthorization("AdminOnly") |> ignore
 
@@ -280,10 +318,19 @@ let mapRoutes (app: WebApplication) =
                     return Results.Unauthorized()
                 else
                     let userId = Guid.Parse userIdClaim.Value
+                    let! submittable = CtfTime.checkSubmittable db
+                    match submittable with
+                    | Error msg -> return Results.BadRequest(msg)
+                    | Ok () ->
                     let! challenge = db.Challenges.FirstOrDefaultAsync(fun c -> c.Id = id && c.Published)
                     match challenge with
                     | null -> return Results.NotFound()
+                    | c when not (CtfTime.isReleased DateTimeOffset.UtcNow c) -> return Results.NotFound()
                     | c ->
+                        let! alreadySolved = db.Submissions.AnyAsync(fun s -> s.AccountId = userId && s.ChallengeId = id && s.IsCorrect)
+                        if alreadySolved then
+                            return Results.BadRequest("Already solved")
+                        else
                         let! attempts = db.Submissions.CountAsync(fun s -> s.AccountId = userId && s.ChallengeId = id)
                         match c.MaxAttempts with
                         | Some max when attempts >= max -> return Results.BadRequest("Max attempts reached")
@@ -318,18 +365,52 @@ let mapRoutes (app: WebApplication) =
     // ===== Scoreboard API =====
     app.MapGet("/api/v1/scoreboard", Func<CtfdDbContext, Task<IResult>>(fun db ->
         task {
-            let! submissions =
+            // 凍結時刻以降の提出・ヒント開放は反映しない
+            let! freezeAt = CtfTime.getFreezeAt db
+            let! allSubmissions =
                 db.Submissions
                   .Where(fun s -> s.IsCorrect)
                   .ToListAsync()
+            let! allUnlocks = db.HintUnlocks.ToListAsync()
+            let submissions =
+                match freezeAt with
+                | Some f -> allSubmissions |> Seq.filter (fun s -> s.SubmittedAt < f) |> Seq.toList
+                | None -> allSubmissions |> Seq.toList
+            let unlocks =
+                match freezeAt with
+                | Some f -> allUnlocks |> Seq.filter (fun u -> u.UnlockedAt < f) |> Seq.toList
+                | None -> allUnlocks |> Seq.toList
+            let netScores = Scoring.netScoresByAccount submissions unlocks
+            let accountIds = netScores |> Map.toSeq |> Seq.map fst |> Seq.toArray
+            let! users =
+                if accountIds.Length = 0 then
+                    Task.FromResult(System.Collections.Generic.List<CtfdUser>())
+                else
+                    db.Users.Where(fun u -> accountIds.Contains u.Id).ToListAsync()
+            let userById = users |> Seq.map (fun u -> u.Id, u) |> dict
+            let! allMembers = db.TeamMembers.ToListAsync()
+            let! allTeams = db.Teams.ToListAsync()
+            let teamById = allTeams |> Seq.map (fun t -> t.Id, t) |> dict
+            let memberByUserId = allMembers |> Seq.map (fun m -> m.UserId, m) |> dict
+            let resolveTeamName (accountId: Guid) =
+                match memberByUserId.TryGetValue(accountId) with
+                | true, m ->
+                    match teamById.TryGetValue(m.TeamId) with
+                    | true, t -> t.Name
+                    | _ -> ""
+                | _ -> ""
             let scores =
-                submissions
-                |> Seq.groupBy (fun s -> s.AccountId)
-                |> Seq.map (fun (accountId, items) ->
-                    { AccountId = accountId
-                      DisplayName = ""
-                      TeamName = ""
-                      Score = items |> Seq.sumBy (fun s -> s.ValueAwarded) })
+                netScores
+                |> Map.toSeq
+                |> Seq.choose (fun (accountId, score) ->
+                    match userById.TryGetValue(accountId) with
+                    | false, _ -> None  // 削除済みユーザーは除外
+                    | true, u ->
+                        let displayName = if String.IsNullOrWhiteSpace u.DisplayName then u.Email else u.DisplayName
+                        Some { AccountId = accountId
+                               DisplayName = displayName
+                               TeamName = resolveTeamName accountId
+                               Score = score })
                 |> Seq.sortByDescending (fun e -> e.Score)
                 |> Seq.toList
             return Results.Ok(scores)
@@ -350,6 +431,17 @@ let mapRoutes (app: WebApplication) =
                     match team with
                     | null -> return None
                     | t -> return Some t
+        }
+
+    /// チームAPI経由の操作を記録するアカウント: AIメンバー優先、いなければオーナー、いなければチームID。
+    let resolveTeamSubmitter (db: CtfdDbContext) (teamId: Guid) =
+        task {
+            let! aiMember = db.TeamMembers.FirstOrDefaultAsync(fun m -> m.TeamId = teamId && m.Role = MemberRole.AI)
+            match aiMember with
+            | null ->
+                let! owner = db.TeamMembers.FirstOrDefaultAsync(fun m -> m.TeamId = teamId && m.Role = MemberRole.Owner)
+                return (if isNull owner then teamId else owner.UserId)
+            | ai -> return ai.UserId
         }
 
     let teamApi = app.MapGroup("/api/v1/team")
@@ -386,13 +478,24 @@ let mapRoutes (app: WebApplication) =
             match teamOpt with
             | None -> return Results.Unauthorized()
             | Some _ ->
-                let! challenges =
-                    db.Challenges
-                      .Where(fun c -> c.Published)
-                      .OrderBy(fun c -> c.CreatedAt)
-                      .Select(fun c -> box {| id = c.Id; name = c.Name; category = c.Category; description = c.Description; valueInitial = c.ValueInitial; valueMinimum = c.ValueMinimum; decay = c.Decay; func = c.Function.ToString(); logic = c.Logic.ToString() |})
-                      .ToListAsync()
-                return Results.Ok(challenges)
+                let! eventState = CtfTime.getEventState db
+                match eventState with
+                | CtfTime.NotStarted _ ->
+                    // イベント開始前はチャレンジを公開しない
+                    return Results.Ok(List.empty<obj>)
+                | _ ->
+                    let now = DateTimeOffset.UtcNow
+                    let! items =
+                        db.Challenges
+                          .Where(fun c -> c.Published)
+                          .OrderBy(fun c -> c.CreatedAt)
+                          .ToListAsync()
+                    let challenges =
+                        items
+                        |> Seq.filter (CtfTime.isReleased now)
+                        |> Seq.map (fun c -> box {| id = c.Id; name = c.Name; category = c.Category; description = c.Description; valueInitial = c.ValueInitial; valueMinimum = c.ValueMinimum; decay = c.Decay; func = c.Function.ToString(); logic = c.Logic.ToString() |})
+                        |> Seq.toList
+                    return Results.Ok(challenges)
         } :> Task<IResult>
     )) |> ignore
 
@@ -403,20 +506,20 @@ let mapRoutes (app: WebApplication) =
             match teamOpt with
             | None -> return Results.Unauthorized()
             | Some team ->
-                let! aiMember =
-                    db.TeamMembers.FirstOrDefaultAsync(fun m -> m.TeamId = team.Id && m.Role = MemberRole.AI)
-                let submitterId =
-                    match aiMember with
-                    | null ->
-                        // AIメンバーがいない場合はオーナーのIDを使用
-                        let ownerTask = db.TeamMembers.FirstOrDefaultAsync(fun m -> m.TeamId = team.Id && m.Role = MemberRole.Owner)
-                        ownerTask.GetAwaiter().GetResult()
-                        |> fun o -> if isNull o then team.Id else o.UserId
-                    | ai -> ai.UserId
-                let! challenge = db.Challenges.FirstOrDefaultAsync(fun c -> c.Id = id && c.Published)
-                match challenge with
-                | null -> return Results.NotFound()
-                | c ->
+                let! submittable = CtfTime.checkSubmittable db
+                match submittable with
+                | Error msg -> return Results.BadRequest(msg)
+                | Ok () ->
+                    let! submitterId = resolveTeamSubmitter db team.Id
+                    let! challenge = db.Challenges.FirstOrDefaultAsync(fun c -> c.Id = id && c.Published)
+                    match challenge with
+                    | null -> return Results.NotFound()
+                    | c when not (CtfTime.isReleased DateTimeOffset.UtcNow c) -> return Results.NotFound()
+                    | c ->
+                    let! alreadySolved = db.Submissions.AnyAsync(fun s -> s.AccountId = submitterId && s.ChallengeId = id && s.IsCorrect)
+                    if alreadySolved then
+                        return Results.BadRequest("既に正解済みです")
+                    else
                     let! attempts = db.Submissions.CountAsync(fun s -> s.AccountId = submitterId && s.ChallengeId = id)
                     match c.MaxAttempts with
                     | Some max when attempts >= max -> return Results.BadRequest("試行回数の上限に達しました")
@@ -455,16 +558,20 @@ let mapRoutes (app: WebApplication) =
             match teamOpt with
             | None -> return Results.Unauthorized()
             | Some _ ->
-                let! exists = db.Challenges.AnyAsync(fun c -> c.Id = id && c.Published)
-                if not exists then
+                let! challenge = db.Challenges.FirstOrDefaultAsync(fun c -> c.Id = id && c.Published)
+                if isNull (box challenge) || not (CtfTime.isReleased DateTimeOffset.UtcNow challenge) then
                     return Results.NotFound()
                 else
-                    let! files =
+                    let! fileRows =
                         db.ChallengeFiles
                           .Where(fun f -> f.ChallengeId = id)
                           .OrderBy(fun f -> f.UploadedAt)
-                          .Select(fun f -> box {| id = f.Id; originalName = f.OriginalName; uploadedAt = f.UploadedAt |})
                           .ToListAsync()
+                    // EF Core は F# 匿名レコードへの Select を翻訳できないためメモリ内で変換する
+                    let files =
+                        fileRows
+                        |> Seq.map (fun f -> box {| id = f.Id; originalName = f.OriginalName; uploadedAt = f.UploadedAt |})
+                        |> Seq.toList
                     return Results.Ok(box {| challengeId = id; files = files |})
         } :> Task<IResult>
     )) |> ignore
@@ -476,6 +583,10 @@ let mapRoutes (app: WebApplication) =
             match teamOpt with
             | None -> return Results.Unauthorized()
             | Some _ ->
+                let! challenge = db.Challenges.FirstOrDefaultAsync(fun c -> c.Id = id && c.Published)
+                if isNull (box challenge) || not (CtfTime.isReleased DateTimeOffset.UtcNow challenge) then
+                    return Results.NotFound()
+                else
                 let! file = db.ChallengeFiles.FirstOrDefaultAsync(fun f -> f.Id = fileId && f.ChallengeId = id)
                 match file with
                 | null -> return Results.NotFound()
@@ -487,6 +598,105 @@ let mapRoutes (app: WebApplication) =
                     else
                         let bytes = File.ReadAllBytes(filePath)
                         return Results.File(bytes, "application/octet-stream", f.OriginalName)
+        } :> Task<IResult>
+    )) |> ignore
+
+    // GET /api/v1/team/notifications — 運営からの通知一覧（新しい順）
+    teamApi.MapGet("/notifications", Func<HttpContext, CtfdDbContext, Task<IResult>>(fun ctx db ->
+        task {
+            let! teamOpt = resolveTeamFromToken ctx db
+            match teamOpt with
+            | None -> return Results.Unauthorized()
+            | Some _ ->
+                let! rows =
+                    db.Notifications
+                      .OrderByDescending(fun n -> n.CreatedAt)
+                      .ToListAsync()
+                // EF Core は F# 匿名レコードへの Select を翻訳できないためメモリ内で変換する
+                let items =
+                    rows
+                    |> Seq.map (fun n -> box {| id = n.Id; title = n.Title; content = n.Content; createdAt = n.CreatedAt |})
+                    |> Seq.toList
+                return Results.Ok(items)
+        } :> Task<IResult>
+    )) |> ignore
+
+    // GET /api/v1/team/challenges/{id}/hints — ヒント一覧（チームの誰かが開放済みなら内容を含む）
+    teamApi.MapGet("/challenges/{id:guid}/hints", Func<Guid, HttpContext, CtfdDbContext, Task<IResult>>(fun id ctx db ->
+        task {
+            let! teamOpt = resolveTeamFromToken ctx db
+            match teamOpt with
+            | None -> return Results.Unauthorized()
+            | Some team ->
+                let! challenge = db.Challenges.FirstOrDefaultAsync(fun c -> c.Id = id && c.Published)
+                if isNull (box challenge) || not (CtfTime.isReleased DateTimeOffset.UtcNow challenge) then
+                    return Results.NotFound()
+                else
+                    let! memberIds =
+                        db.TeamMembers
+                          .Where(fun m -> m.TeamId = team.Id)
+                          .Select(fun m -> m.UserId)
+                          .ToListAsync()
+                    let! hints =
+                        db.Hints
+                          .Where(fun h -> h.ChallengeId = id)
+                          .OrderBy(fun h -> h.SortOrder)
+                          .ToListAsync()
+                    let hintIds = hints |> Seq.map (fun h -> h.Id) |> Seq.toArray
+                    let! unlocked =
+                        if hintIds.Length = 0 then
+                            Task.FromResult(System.Collections.Generic.List<HintUnlock>())
+                        else
+                            db.HintUnlocks
+                              .Where(fun u -> hintIds.Contains(u.HintId) && memberIds.Contains(u.AccountId))
+                              .ToListAsync()
+                    let unlockedSet = unlocked |> Seq.map (fun u -> u.HintId) |> Set.ofSeq
+                    let payload =
+                        hints
+                        |> Seq.map (fun h ->
+                            if unlockedSet.Contains h.Id then
+                                box {| id = h.Id; cost = h.Cost; unlocked = true; content = h.Content |}
+                            else
+                                box {| id = h.Id; cost = h.Cost; unlocked = false; content = "" |})
+                        |> Seq.toList
+                    return Results.Ok(payload)
+        } :> Task<IResult>
+    )) |> ignore
+
+    // POST /api/v1/team/challenges/{id}/hints/{hintId}/unlock — ヒント開放（コストはスコアから減算）
+    teamApi.MapPost("/challenges/{id:guid}/hints/{hintId:guid}/unlock", Func<Guid, Guid, HttpContext, CtfdDbContext, Task<IResult>>(fun id hintId ctx db ->
+        task {
+            let! teamOpt = resolveTeamFromToken ctx db
+            match teamOpt with
+            | None -> return Results.Unauthorized()
+            | Some team ->
+                let! submittable = CtfTime.checkSubmittable db
+                match submittable with
+                | Error msg -> return Results.BadRequest(msg)
+                | Ok () ->
+                    let! challenge = db.Challenges.FirstOrDefaultAsync(fun c -> c.Id = id && c.Published)
+                    if isNull (box challenge) || not (CtfTime.isReleased DateTimeOffset.UtcNow challenge) then
+                        return Results.NotFound()
+                    else
+                    let! hint = db.Hints.FirstOrDefaultAsync(fun h -> h.Id = hintId && h.ChallengeId = id)
+                    if isNull (box hint) then
+                        return Results.NotFound()
+                    else
+                    let! submitterId = resolveTeamSubmitter db team.Id
+                    let! already = db.HintUnlocks.AnyAsync(fun u -> u.HintId = hintId && u.AccountId = submitterId)
+                    if already then
+                        return Results.Ok(box {| status = "already_unlocked"; cost = hint.Cost; content = hint.Content |})
+                    else
+                        let unlock =
+                            { Id = Guid.NewGuid()
+                              HintId = hint.Id
+                              ChallengeId = id
+                              AccountId = submitterId
+                              Cost = hint.Cost
+                              UnlockedAt = DateTimeOffset.UtcNow }
+                        db.HintUnlocks.Add(unlock) |> ignore
+                        let! _ = db.SaveChangesAsync()
+                        return Results.Ok(box {| status = "unlocked"; cost = hint.Cost; content = hint.Content |})
         } :> Task<IResult>
     )) |> ignore
 
@@ -571,6 +781,27 @@ let [<EntryPoint>] main args =
     // ThemePreset列がなければ追加（レガシースキーマ移行）
     db.Database.ExecuteSqlRaw(
         "DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='CtfSettings' AND column_name='ThemePreset') THEN ALTER TABLE \"CtfSettings\" ADD COLUMN \"ThemePreset\" text NOT NULL DEFAULT 'purple-network'; END IF; END $$;") |> ignore
+    // FreezeAt列がなければ追加（スコアボード凍結機能）
+    db.Database.ExecuteSqlRaw(
+        "DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='CtfSettings' AND column_name='FreezeAt') THEN ALTER TABLE \"CtfSettings\" ADD COLUMN \"FreezeAt\" timestamptz; END IF; END $$;") |> ignore
+
+    // Hints / HintUnlocks テーブル作成（ヒント機能）
+    db.Database.ExecuteSqlRaw(
+        "CREATE TABLE IF NOT EXISTS \"Hints\" (\"Id\" uuid PRIMARY KEY, \"ChallengeId\" uuid NOT NULL, \"Content\" text NOT NULL, \"Cost\" integer NOT NULL DEFAULT 0, \"SortOrder\" integer NOT NULL DEFAULT 0);") |> ignore
+    db.Database.ExecuteSqlRaw(
+        "CREATE INDEX IF NOT EXISTS \"IX_Hints_ChallengeId\" ON \"Hints\" (\"ChallengeId\");") |> ignore
+    db.Database.ExecuteSqlRaw(
+        "CREATE TABLE IF NOT EXISTS \"HintUnlocks\" (\"Id\" uuid PRIMARY KEY, \"HintId\" uuid NOT NULL, \"ChallengeId\" uuid NOT NULL, \"AccountId\" uuid NOT NULL, \"Cost\" integer NOT NULL DEFAULT 0, \"UnlockedAt\" timestamptz NOT NULL);") |> ignore
+    db.Database.ExecuteSqlRaw(
+        "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_HintUnlocks_HintId_AccountId\" ON \"HintUnlocks\" (\"HintId\", \"AccountId\");") |> ignore
+    db.Database.ExecuteSqlRaw(
+        "CREATE INDEX IF NOT EXISTS \"IX_HintUnlocks_AccountId\" ON \"HintUnlocks\" (\"AccountId\");") |> ignore
+
+    // Notifications テーブル作成（通知機能）
+    db.Database.ExecuteSqlRaw(
+        "CREATE TABLE IF NOT EXISTS \"Notifications\" (\"Id\" uuid PRIMARY KEY, \"Title\" text NOT NULL, \"Content\" text NOT NULL, \"CreatedAt\" timestamptz NOT NULL);") |> ignore
+    db.Database.ExecuteSqlRaw(
+        "CREATE INDEX IF NOT EXISTS \"IX_Notifications_CreatedAt\" ON \"Notifications\" (\"CreatedAt\");") |> ignore
     // Challenges に ReleaseAt / Difficulty 列を追加（レガシースキーマ移行）
     db.Database.ExecuteSqlRaw(
         "DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='Challenges' AND column_name='ReleaseAt') THEN ALTER TABLE \"Challenges\" ADD COLUMN \"ReleaseAt\" timestamptz; END IF; END $$;") |> ignore

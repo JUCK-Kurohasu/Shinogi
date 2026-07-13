@@ -1,16 +1,16 @@
 # Shinogi
 
-F# + ASP.NET Core 8.0 + PostgreSQL 16 で構築された CTF (Capture The Flag) 競技プラットフォーム。
+F# + ASP.NET Core 10.0 + PostgreSQL 16 で構築された CTF (Capture The Flag) 競技プラットフォーム。
 
 Razor MVC による Web UI と JWT 認証の REST API を提供し、AI エージェントのチーム参加にも対応しています。
 
 ## 技術スタック
 
 ![F#](https://img.shields.io/badge/F%23-512BD4?style=flat-square&logo=fsharp&logoColor=white)
-![.NET 8.0](https://img.shields.io/badge/.NET-8.0-512BD4?style=flat-square&logo=dotnet&logoColor=white)
-![ASP.NET Core](https://img.shields.io/badge/ASP.NET%20Core-8.0-512BD4?style=flat-square&logo=dotnet&logoColor=white)
+![.NET 10.0](https://img.shields.io/badge/.NET-10.0-512BD4?style=flat-square&logo=dotnet&logoColor=white)
+![ASP.NET Core](https://img.shields.io/badge/ASP.NET%20Core-10.0-512BD4?style=flat-square&logo=dotnet&logoColor=white)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?style=flat-square&logo=postgresql&logoColor=white)
-![Entity Framework Core](https://img.shields.io/badge/EF%20Core-8.0-512BD4?style=flat-square&logo=dotnet&logoColor=white)
+![Entity Framework Core](https://img.shields.io/badge/EF%20Core-10.0-512BD4?style=flat-square&logo=dotnet&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-2496ED?style=flat-square&logo=docker&logoColor=white)
 ![JWT](https://img.shields.io/badge/JWT-000000?style=flat-square&logo=jsonwebtokens&logoColor=white)
 ![Swagger](https://img.shields.io/badge/Swagger-85EA2D?style=flat-square&logo=swagger&logoColor=black)
@@ -21,7 +21,7 @@ Razor MVC による Web UI と JWT 認証の REST API を提供し、AI エー�
 
 ## 必要環境
 
-- [.NET 8.0 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)
+- [.NET 10.0 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)
 - [Docker](https://www.docker.com/) （PostgreSQL・MailHog 用）
 
 ## セットアップ
@@ -170,10 +170,38 @@ https://localhost:7262 でアクセスできます。
 
 `/Admin` にアクセスすると管理画面が利用できます（`Admins` ロールが必要）。
 
-- **Challenges** — チャレンジの作成・編集・削除、フラグ管理、配布ファイル管理
+- **Challenges** — チャレンジの作成・編集・削除、フラグ管理、ヒント管理、配布ファイル管理
+- **Submissions** — 提出ログ閲覧（直近500件: ユーザー・チャレンジ・正誤・獲得pt・IP）
 - **Users** — ユーザー一覧、ロール変更、パスワード強制リセット
 - **Teams** — チーム管理、メンバー追加・削除・ロール変更、トークン再生成
-- **Settings** — テーマ切り替え、DB リセット
+- **Notifications** — 全体通知（アナウンス）の配信・削除
+- **Settings** — 開催時間ウィンドウ、スコアボード凍結時刻、テーマ切り替え、DB リセット
+
+## CTF 運営機能
+
+### 開催時間ウィンドウ（EventStart / EventEnd）
+
+Admin > Settings で開催開始・終了時刻を設定すると:
+
+- **開始前** — チャレンジ一覧が非公開になり（Web UI・API とも）、フラグ提出・ヒント開放・インスタンス起動が拒否されます。
+- **終了後** — チャレンジは閲覧できますが、提出・ヒント開放・インスタンス起動はできません。
+- 空欄の場合は制限なし（常時開催）。
+
+### スコアボード凍結（FreezeAt）
+
+Admin > Settings で凍結時刻を設定すると、その時刻以降の提出・ヒント開放は公開スコアボード（Web UI・API とも）に反映されません。終盤の順位を隠す CTF の定番演出です。空欄で凍結なし。
+
+### ヒント
+
+チャレンジごとにコスト付きヒントを登録できます（Admin > Challenges > Hints）。
+
+- プレイヤーはチャレンジカードからヒントを開放できます。コストが設定されている場合、開放したユーザーのスコアから減算されます（CTFd と同じ方式）。
+- 開放は取り消せません。ヒント自体を削除しても、開放済みユーザーのコスト減算は維持されます。
+- スコア計算: `合計スコア = 正解提出の獲得ポイント合計 − 開放ヒントのコスト合計`
+
+### 通知（アナウンス）
+
+Admin > Notifications から全体向けのお知らせを配信できます。プレイヤーはナビの Notifications ページ、AI エージェントは `/api/v1/team/notifications` から取得できます。
 
 ## API
 
@@ -194,13 +222,19 @@ GET  /api/v1/scoreboard        スコアボード
 `X-Team-Token` ヘッダーでチームトークンを送信して認証します。
 
 ```
-GET  /api/v1/team/info                       チーム情報取得
-GET  /api/v1/team/challenges                 チャレンジ一覧
-POST /api/v1/team/challenges/{id}/submit     フラグ提出
-GET  /api/v1/team/challenges/{id}/files      配布ファイル取得
+GET  /api/v1/team/info                                チーム情報取得
+GET  /api/v1/team/challenges                          チャレンジ一覧
+POST /api/v1/team/challenges/{id}/submit              フラグ提出
+GET  /api/v1/team/challenges/{id}/files               配布ファイル一覧
+GET  /api/v1/team/challenges/{id}/files/{fileId}      配布ファイルダウンロード
+GET  /api/v1/team/challenges/{id}/hints               ヒント一覧（開放済みは内容付き）
+POST /api/v1/team/challenges/{id}/hints/{hintId}/unlock  ヒント開放（コストはスコアから減算）
+GET  /api/v1/team/notifications                       運営からの通知一覧
 ```
 
 チームトークンは、プロフィールの Team ページまたは管理画面から確認・再生成できます。
+
+提出は同一チャレンジに正解済みの場合 `既に正解済みです` で拒否されます。イベント開催時間外の提出も拒否されます。
 
 ## プロジェクト構成
 
@@ -211,7 +245,8 @@ Dtos.fs                 API リクエスト/レスポンス DTO
 Data.fs                 EF Core DbContext
 Program.fs              エントリーポイント、DI 設定、API 定義
 Services/
-  Scoring.fs            動的スコアリング計算
+  Scoring.fs            動的スコアリング計算・純スコア集計（ヒントコスト減算）
+  CtfTime.fs            開催時間ウィンドウ・リリース時刻・凍結時刻の判定
   Security.fs           SHA256 ハッシュ（フラグ比較用）
   EmailService.fs       メール送信
 ViewModels/             MVC ビューモデル

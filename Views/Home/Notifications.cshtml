@@ -1,0 +1,26 @@
+@model System.Collections.Generic.List<Shinogi.Domain.Notification>
+<section>
+    <h1>Notifications</h1>
+    @if (Model.Count == 0)
+    {
+        <div class="coming-soon">通知はまだありません。</div>
+    }
+    else
+    {
+        <div class="cards" style="grid-template-columns: 1fr;">
+        @foreach (var n in Model)
+        {
+            <article class="card">
+                <header>
+                    <h3>📢 @n.Title</h3>
+                    <span class="pill">@n.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</span>
+                </header>
+                @if (!string.IsNullOrWhiteSpace(n.Content))
+                {
+                    <p style="white-space:pre-wrap;">@n.Content</p>
+                }
+            </article>
+        }
+        </div>
+    }
+</section>

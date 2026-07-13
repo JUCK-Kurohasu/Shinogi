@@ -9,15 +9,30 @@
         ?? new Dictionary<Guid, (int, int)>();
     var userInstances = ViewData["UserInstances"] as Dictionary<Guid, Shinogi.Domain.ChallengeInstance>
         ?? new Dictionary<Guid, Shinogi.Domain.ChallengeInstance>();
+    var hintsByChallenge = ViewData["HintsByChallenge"] as Dictionary<Guid, List<Shinogi.Domain.Hint>>
+        ?? new Dictionary<Guid, List<Shinogi.Domain.Hint>>();
+    var unlockedHints = ViewData["UnlockedHints"] as HashSet<Guid>
+        ?? new HashSet<Guid>();
 }
 <section>
     <h1>Challenges</h1>
-    @if (Model.Count == 0)
+    @if (ViewData["EventNotStarted"] != null)
+    {
+        <div class="coming-soon">
+            CTF はまだ開始されていません。<br />
+            <span style="font-size:14px; color:var(--primary-muted);">開始予定: @ViewData["EventNotStarted"]</span>
+        </div>
+    }
+    else if (Model.Count == 0)
     {
         <div class="coming-soon">Coming soon...</div>
     }
     else
     {
+        @if (ViewData["EventEnded"] != null)
+        {
+            <div class="alert-error" style="margin-bottom:16px;">CTF は終了しました。チャレンジの閲覧はできますが、フラグの提出はできません。</div>
+        }
         <div class="cards">
         @foreach (var c in Model)
         {
@@ -45,6 +60,32 @@
                                style="display:inline-block; margin:2px 6px 2px 0; padding:4px 10px; background:var(--border); border-radius:6px; color:var(--primary-hover); font-size:12px; text-decoration:none;">
                                 @f.OriginalName
                             </a>
+                        }
+                    </div>
+                }
+                @if (hintsByChallenge.ContainsKey(c.Id) && hintsByChallenge[c.Id].Count > 0)
+                {
+                    <div style="margin-bottom:12px;">
+                        <span style="color:var(--primary-muted); font-size:13px;">Hints:</span>
+                        @foreach (var h in hintsByChallenge[c.Id])
+                        {
+                            @if (unlockedHints.Contains(h.Id))
+                            {
+                                <div style="margin:4px 0; padding:8px 10px; background:var(--border); border-left:3px solid var(--primary); border-radius:4px; font-size:13px; white-space:pre-wrap;">@h.Content</div>
+                            }
+                            else if (User.Identity != null && User.Identity.IsAuthenticated)
+                            {
+                                <form method="post" asp-controller="Challenges" asp-action="UnlockHint" asp-route-id="@c.Id" asp-route-hintId="@h.Id" style="margin:4px 0;"
+                                      onsubmit="return confirm('@(h.Cost > 0 ? $"このヒントを開放するとスコアから {h.Cost} pt 減算されます。開放しますか？" : "このヒントを開放しますか？")')">
+                                    <button type="submit" style="font-size:12px; padding:5px 12px; background:var(--surface-input); border:1px dashed var(--primary-muted); color:var(--primary-hover);">
+                                        🔒 ヒントを開放 @(h.Cost > 0 ? $"（-{h.Cost} pt）" : "（無料）")
+                                    </button>
+                                </form>
+                            }
+                            else
+                            {
+                                <div style="margin:4px 0; font-size:12px; color:var(--primary-muted);">🔒 ヒントあり（ログインで開放可能）</div>
+                            }
                         }
                     </div>
                 }

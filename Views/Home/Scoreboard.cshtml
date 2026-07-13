@@ -2,6 +2,13 @@
 <section>
     <h1>Scoreboard</h1>
 
+    @if (ViewData["FrozenAt"] != null)
+    {
+        <div style="background:var(--surface); border:1px solid var(--primary); border-radius:10px; padding:12px 16px; margin-bottom:16px; font-size:14px;">
+            ❄️ スコアボードは <strong>@ViewData["FrozenAt"]</strong> 時点で凍結中です。以降の提出は最終結果発表まで反映されません。
+        </div>
+    }
+
     @if (Model.TeamTimelines.Count > 0)
     {
         <div style="background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:20px; margin-bottom:24px;">

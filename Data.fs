@@ -20,6 +20,9 @@ type CtfdDbContext(options: DbContextOptions<CtfdDbContext>) =
     [<DefaultValue>] val mutable challengeDifficulties: DbSet<ChallengeDifficulty>
     [<DefaultValue>] val mutable challengeFiles: DbSet<ChallengeFile>
     [<DefaultValue>] val mutable challengeInstances: DbSet<ChallengeInstance>
+    [<DefaultValue>] val mutable hints: DbSet<Hint>
+    [<DefaultValue>] val mutable hintUnlocks: DbSet<HintUnlock>
+    [<DefaultValue>] val mutable notifications: DbSet<Notification>
 
     member this.Challenges with get() = this.challenges and set v = this.challenges <- v
     member this.Flags with get() = this.flags and set v = this.flags <- v
@@ -31,6 +34,9 @@ type CtfdDbContext(options: DbContextOptions<CtfdDbContext>) =
     member this.ChallengeDifficulties with get() = this.challengeDifficulties and set v = this.challengeDifficulties <- v
     member this.ChallengeFiles with get() = this.challengeFiles and set v = this.challengeFiles <- v
     member this.ChallengeInstances with get() = this.challengeInstances and set v = this.challengeInstances <- v
+    member this.Hints with get() = this.hints and set v = this.hints <- v
+    member this.HintUnlocks with get() = this.hintUnlocks and set v = this.hintUnlocks <- v
+    member this.Notifications with get() = this.notifications and set v = this.notifications <- v
 
     override _.OnModelCreating(builder: ModelBuilder) =
         base.OnModelCreating(builder)
@@ -81,6 +87,7 @@ type CtfdDbContext(options: DbContextOptions<CtfdDbContext>) =
         builder.Entity<Challenge>().Property(fun c -> c.InstancePort).HasConversion(maxAttemptsConverter).IsRequired(false) |> ignore
         builder.Entity<CtfSettings>().Property(fun s -> s.EventStart).HasConversion(dtoConverter).IsRequired(false) |> ignore
         builder.Entity<CtfSettings>().Property(fun s -> s.EventEnd).HasConversion(dtoConverter).IsRequired(false) |> ignore
+        builder.Entity<CtfSettings>().Property(fun s -> s.FreezeAt).HasConversion(dtoConverter).IsRequired(false) |> ignore
         builder.Entity<Flag>().HasIndex("ChallengeId", "ContentHash").IsUnique() |> ignore
         builder.Entity<Flag>().HasOne<Challenge>().WithMany().HasForeignKey("ChallengeId") |> ignore
         builder.Entity<Submission>().HasIndex("AccountId") |> ignore
@@ -98,3 +105,8 @@ type CtfdDbContext(options: DbContextOptions<CtfdDbContext>) =
         builder.Entity<ChallengeInstance>().HasIndex("Status") |> ignore
         builder.Entity<ChallengeInstance>().HasIndex("AccessSlug") |> ignore
         builder.Entity<ChallengeInstance>().HasOne<Challenge>().WithMany().HasForeignKey("ChallengeId") |> ignore
+        builder.Entity<Hint>().HasOne<Challenge>().WithMany().HasForeignKey("ChallengeId") |> ignore
+        builder.Entity<Hint>().HasIndex("ChallengeId") |> ignore
+        builder.Entity<HintUnlock>().HasIndex("HintId", "AccountId").IsUnique() |> ignore
+        builder.Entity<HintUnlock>().HasIndex("AccountId") |> ignore
+        builder.Entity<Notification>().HasIndex("CreatedAt") |> ignore
