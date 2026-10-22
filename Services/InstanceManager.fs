@@ -18,12 +18,10 @@ module InstanceManager =
     let maxPort = 32000
     let private instancesNetworkName = "shinogi-instances"
 
-    let generateInstanceFlag (challengeId: Guid) (userId: Guid) : string =
-        let data = $"{challengeId}_{userId}_{DateTimeOffset.UtcNow.ToUnixTimeSeconds()}"
-        use sha256 = SHA256.Create()
-        let hash = sha256.ComputeHash(Encoding.UTF8.GetBytes(data))
-        let hashStr = BitConverter.ToString(hash).Replace("-", "").ToLowerInvariant()
-        $"flag{{{hashStr.Substring(0, 16)}}}"
+    /// インスタンス固有フラグ。チャレンジID・ユーザーID・時刻は参加者から推測できるため、CSPRNG で 128bit を生成する。
+    let generateInstanceFlag () : string =
+        let hex = RandomNumberGenerator.GetHexString(32, true)
+        $"flag{{{hex}}}"
 
     let findAvailablePort (db: CtfdDbContext) : Task<int option> =
         task {
@@ -254,7 +252,7 @@ networks:
                     match portOpt with
                     | None -> return Error "利用可能なポートがありません"
                     | Some hostPort ->
-                        let flag = generateInstanceFlag challenge.Id userId
+                        let flag = generateInstanceFlag ()
                         let containerName = $"ctf-{userId.ToString().Substring(0, 8)}-{challenge.Id.ToString().Substring(0, 8)}"
                         let containerPortStr =
                             match challenge.InstancePort with

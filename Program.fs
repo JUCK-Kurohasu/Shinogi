@@ -57,8 +57,13 @@ let configureServices (builder: WebApplicationBuilder) =
                 IssuerSigningKey = keyBytes))
         |> ignore
 
+    // AddIdentity が既定スキームを Cookie にするため、JWT API のポリシーは Bearer スキームを明示する
+    // （未指定だと Bearer トークンが無視され、常に 401 + ログイン画面リダイレクトになる）。
     builder.Services.AddAuthorization(fun opts ->
-        opts.AddPolicy("AdminOnly", fun p -> p.RequireRole("Admins") |> ignore)) |> ignore
+        opts.AddPolicy("ApiUser", fun p ->
+            p.AddAuthenticationSchemes(JwtBearerDefaults.AuthenticationScheme).RequireAuthenticatedUser() |> ignore)
+        opts.AddPolicy("AdminOnly", fun p ->
+            p.AddAuthenticationSchemes(JwtBearerDefaults.AuthenticationScheme).RequireRole("Admins") |> ignore)) |> ignore
 
     builder.Services.AddRateLimiter(fun opts ->
         opts.GlobalLimiter <- PartitionedRateLimiter.Create(fun (ctx: HttpContext) ->
@@ -113,12 +118,13 @@ let loadDotEnv (path: string) =
                     if String.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(key)) then
                         Environment.SetEnvironmentVariable(key, value))
 
-let issueJwt (config: Microsoft.Extensions.Configuration.IConfiguration) (user: CtfdUser) =
+let issueJwt (config: Microsoft.Extensions.Configuration.IConfiguration) (user: CtfdUser) (roles: string seq) =
     let claims =
         [| System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.NameIdentifier, user.Id.ToString())
            System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.Name, user.UserName)
            System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.Email, user.Email)
-           System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.Role, "user") |]
+           for role in roles do
+               System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.Role, role) |]
     let key = SymmetricSecurityKey(Encoding.UTF8.GetBytes(config["Jwt:Key"]))
     let creds = SigningCredentials(key, SecurityAlgorithms.HmacSha256)
     let token = System.IdentityModel.Tokens.Jwt.JwtSecurityToken(
@@ -190,7 +196,7 @@ let mapRoutes (app: WebApplication) =
                 if not res.Succeeded then
                     return Results.BadRequest(res.Errors |> Seq.map (fun e -> e.Description))
                 else
-                    return Results.Ok(issueJwt app.Configuration user)
+                    return Results.Ok(issueJwt app.Configuration user Seq.empty)
         } :> Task<IResult>
     )) |> ignore
 
@@ -204,7 +210,8 @@ let mapRoutes (app: WebApplication) =
                 if not check.Succeeded then
                     return Results.Unauthorized()
                 else
-                    return Results.Ok(issueJwt app.Configuration u)
+                    let! roles = userMgr.GetRolesAsync(u)
+                    return Results.Ok(issueJwt app.Configuration u roles)
         } :> Task<IResult>
     )) |> ignore
 
@@ -335,10 +342,7 @@ let mapRoutes (app: WebApplication) =
                         match c.MaxAttempts with
                         | Some max when attempts >= max -> return Results.BadRequest("Max attempts reached")
                         | _ ->
-                            let normalized = if isNull dto.Flag then "" else dto.Flag
-                            let hashExact = Security.sha256 normalized
-                            let hashLower = Security.sha256 (normalized.ToLowerInvariant())
-                            let! correct = db.Flags.AnyAsync(fun f -> f.ChallengeId = id && ((f.CaseSensitive && f.ContentHash = hashExact) || ((not f.CaseSensitive) && f.ContentHash = hashLower)))
+                            let! correct = FlagCheck.isCorrect db id [| userId |] dto.Flag
                             let! solveCount = db.Submissions.CountAsync(fun s -> s.ChallengeId = id && s.IsCorrect)
                             let awarded = if correct then Scoring.dynamicValue c solveCount else 0
                             let ip =
@@ -354,13 +358,15 @@ let mapRoutes (app: WebApplication) =
                                   ValueAwarded = awarded
                                   Ip = ip }
                             db.Submissions.Add(submission) |> ignore
-                            let! _ = db.SaveChangesAsync()
-                            if correct then
+                            let! saved = FlagCheck.trySaveSubmission db
+                            if not saved then
+                                return Results.BadRequest("Already solved")
+                            elif correct then
                                 return Results.Ok(box {| status = "correct"; value = awarded |})
                             else
                                 return Results.Ok(box {| status = "incorrect" |})
             } :> Task<IResult>))
-    submitHandler.RequireAuthorization() |> ignore
+    submitHandler.RequireAuthorization("ApiUser") |> ignore
 
     // ===== Scoreboard API =====
     app.MapGet("/api/v1/scoreboard", Func<CtfdDbContext, Task<IResult>>(fun db ->
@@ -524,10 +530,13 @@ let mapRoutes (app: WebApplication) =
                     match c.MaxAttempts with
                     | Some max when attempts >= max -> return Results.BadRequest("試行回数の上限に達しました")
                     | _ ->
-                        let normalized = if isNull dto.Flag then "" else dto.Flag
-                        let hashExact = Security.sha256 normalized
-                        let hashLower = Security.sha256 (normalized.ToLowerInvariant())
-                        let! correct = db.Flags.AnyAsync(fun f -> f.ChallengeId = id && ((f.CaseSensitive && f.ContentHash = hashExact) || ((not f.CaseSensitive) && f.ContentHash = hashLower)))
+                        // チームメンバーの誰が起動したインスタンスのフラグでも受け付ける
+                        let! memberIds =
+                            db.TeamMembers
+                              .Where(fun m -> m.TeamId = team.Id)
+                              .Select(fun m -> m.UserId)
+                              .ToArrayAsync()
+                        let! correct = FlagCheck.isCorrect db id memberIds dto.Flag
                         let! solveCount = db.Submissions.CountAsync(fun s -> s.ChallengeId = id && s.IsCorrect)
                         let awarded = if correct then Scoring.dynamicValue c solveCount else 0
                         let ip =
@@ -543,8 +552,10 @@ let mapRoutes (app: WebApplication) =
                               ValueAwarded = awarded
                               Ip = ip }
                         db.Submissions.Add(submission) |> ignore
-                        let! _ = db.SaveChangesAsync()
-                        if correct then
+                        let! saved = FlagCheck.trySaveSubmission db
+                        if not saved then
+                            return Results.BadRequest("既に正解済みです")
+                        elif correct then
                             return Results.Ok(box {| status = "correct"; value = awarded |})
                         else
                             return Results.Ok(box {| status = "incorrect" |})
@@ -775,6 +786,12 @@ let [<EntryPoint>] main args =
         "DROP INDEX IF EXISTS \"IX_Flags_ContentHash\";") |> ignore
     db.Database.ExecuteSqlRaw(
         "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_Flags_ChallengeId_ContentHash\" ON \"Flags\" (\"ChallengeId\", \"ContentHash\");") |> ignore
+    // 正解提出の一意制約（同時提出による二重得点の防止）。既存DBに重複があると作成できないため警告に留める
+    try
+        db.Database.ExecuteSqlRaw(
+            $"CREATE UNIQUE INDEX IF NOT EXISTS \"{FlagCheck.correctSubmissionIndexName}\" ON \"Submissions\" (\"AccountId\", \"ChallengeId\") WHERE \"IsCorrect\";") |> ignore
+    with ex ->
+        Console.WriteLine($"WARNING: {FlagCheck.correctSubmissionIndexName} を作成できません（同一ユーザー×同一チャレンジの正解提出が重複している可能性があります）。重複を削除して再起動してください: {ex.Message}")
     // Flags に Content列がなければ追加（元のフラグ文字列を保持）
     db.Database.ExecuteSqlRaw(
         "DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='Flags' AND column_name='Content') THEN ALTER TABLE \"Flags\" ADD COLUMN \"Content\" text NOT NULL DEFAULT ''; END IF; END $$;") |> ignore

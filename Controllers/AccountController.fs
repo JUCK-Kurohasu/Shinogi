@@ -27,7 +27,8 @@ type AccountController(userManager: UserManager<CtfdUser>, signInManager: SignIn
                 this.TempData["Error"] <- "メールアドレスまたはパスワードが正しくありません。"
                 return this.View() :> IActionResult
             | u ->
-                let! res = signInManager.PasswordSignInAsync(u, dto.Password, true, false)
+                // lockoutOnFailure=true: JWT API と同じくパスワード総当たりをロックアウトで抑止する
+                let! res = signInManager.PasswordSignInAsync(u, dto.Password, true, true)
                 if res.Succeeded then
                     this.TempData["Success"] <- "ログインしました。"
                     return this.RedirectToAction("Index", "Home") :> IActionResult
