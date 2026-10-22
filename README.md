@@ -248,6 +248,7 @@ Services/
   Scoring.fs            動的スコアリング計算・純スコア集計（ヒントコスト減算）
   CtfTime.fs            開催時間ウィンドウ・リリース時刻・凍結時刻の判定
   Security.fs           SHA256 ハッシュ（フラグ比較用）
+  FlagCheck.fs          フラグ判定（静的フラグ＋インスタンス固有フラグ）・正解の二重記録防止
   EmailService.fs       メール送信
 ViewModels/             MVC ビューモデル
 Controllers/            MVC コントローラー

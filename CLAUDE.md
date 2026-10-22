@@ -37,6 +37,7 @@ dotnet publish -c Release -o ./publish
 - **Services/Scoring.fs** — 動的スコアリング: 解答チーム数が増えるほどポイントが減少する。`netScoresByAccount`でヒントコストを減算した純スコアを集計。
 - **Services/CtfTime.fs** — 開催時間ウィンドウ（EventStart/EventEnd）の状態判定、提出可否チェック、ReleaseAt判定、凍結時刻（FreezeAt）取得。
 - **Services/Security.fs** — フラグ内容比較用のSHA256ハッシュ。
+- **Services/FlagCheck.fs** — 3経路共通のフラグ判定（静的フラグ＋インスタンス固有フラグ）と、正解提出の一意制約違反を「既解」として扱う保存処理。
 
 ### コントローラー (MVC)
 
@@ -71,7 +72,8 @@ GET  /api/v1/team/notifications                          通知一覧
 
 ### 重要なパターン
 
-- **フラグ提出フロー**: 開催時間ウィンドウチェック（`CtfTime.checkSubmittable`）→ チャレンジの公開・リリース確認 → 既解チェック（重複ポイント防止）→ ユーザーが平文フラグを送信 → SHA256ハッシュ化 → 保存済みハッシュと比較 → 正解の場合、`dynamicValue`が解答数に基づきポイントを計算 → Submissionレコードにスコアを記録。MVC/JWT API/チームAPIの3経路すべてで同じチェックを行う。
+- **フラグ提出フロー**: 開催時間ウィンドウチェック（`CtfTime.checkSubmittable`）→ チャレンジの公開・リリース確認 → 既解チェック（重複ポイント防止）→ ユーザーが平文フラグを送信 → `FlagCheck.isCorrect`（SHA256ハッシュを保存済みハッシュと比較、または提出者本人／チームAPIならチームメンバーが起動したインスタンスの固有フラグと一致）→ 正解の場合、`dynamicValue`が解答数に基づきポイントを計算 → `FlagCheck.trySaveSubmission`でSubmissionを保存（部分一意インデックス`IX_Submissions_AccountId_ChallengeId_Correct`で同時提出による二重得点を防ぎ、違反時は既解扱い）。MVC/JWT API/チームAPIの3経路すべてで同じチェックを行う。
+- **JWT API の認可**: `AddIdentity`が既定スキームをCookieにするため、Minimal APIは`ApiUser`/`AdminOnly`ポリシー（Bearerスキーム明示）で保護する。JWTにはユーザーのIdentityロールをRoleクレームとして載せる。
 - **スコア集計**: `Scoring.netScoresByAccount`で「正解提出の合計 − 開放ヒントのコスト合計」の純スコアを計算。スコアボード・プロフィール・修了証すべてこの方式。公開スコアボードはさらに`FreezeAt`以降の提出・ヒント開放を除外する。
 - **ヒント開放**: `HintUnlock`にChallengeIdとCostを非正規化して保存するため、ヒント削除後もコスト減算が維持される（CTFdと同じ挙動）。
 - **EF CoreとF#の制約**: EF CoreのクエリはF#匿名レコード（`{| ... |}`）へのSelect射影や判別共用体を含む型のJSONシリアライズを扱えない。エンティティを`ToListAsync()`で取得してからメモリ内で`Seq.map`し、APIレスポンスは匿名レコードに射影すること。

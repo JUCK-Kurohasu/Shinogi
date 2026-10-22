@@ -200,10 +200,7 @@ type ChallengesController(db: CtfdDbContext, userManager: UserManager<CtfdUser>,
                         this.TempData["Error"] <- "最大試行回数に達しました。"
                         return this.RedirectToAction("Index") :> IActionResult
                     | _ ->
-                        let normalized = if isNull flag then "" else flag.Trim()
-                        let hashExact = Security.sha256 normalized
-                        let hashLower = Security.sha256 (normalized.ToLowerInvariant())
-                        let! correct = db.Flags.AnyAsync(fun f -> f.ChallengeId = id && ((f.CaseSensitive && f.ContentHash = hashExact) || ((not f.CaseSensitive) && f.ContentHash = hashLower)))
+                        let! correct = FlagCheck.isCorrect db id [| user.Id |] flag
                         let! solveCount = db.Submissions.CountAsync(fun s -> s.ChallengeId = id && s.IsCorrect)
                         let awarded = if correct then Scoring.dynamicValue challenge solveCount else 0
                         let ip =
@@ -219,8 +216,10 @@ type ChallengesController(db: CtfdDbContext, userManager: UserManager<CtfdUser>,
                               ValueAwarded = awarded
                               Ip = ip }
                         db.Submissions.Add(submission) |> ignore
-                        let! _ = db.SaveChangesAsync()
-                        if correct then
+                        let! saved = FlagCheck.trySaveSubmission db
+                        if not saved then
+                            this.TempData["Info"] <- "既に正解済みです。"
+                        elif correct then
                             this.TempData["Success"] <- $"正解！ {awarded} ポイント獲得！"
                         else
                             this.TempData["Error"] <- "不正解です。"
@@ -259,7 +258,7 @@ type ChallengesController(db: CtfdDbContext, userManager: UserManager<CtfdUser>,
                 return this.RedirectToAction("Index") :> IActionResult
             | Ok () ->
             let! challenge = db.Challenges.FirstOrDefaultAsync(fun c -> c.Id = id && c.Published && c.RequiresInstance)
-            if isNull challenge then
+            if isNull challenge || not (CtfTime.isReleased DateTimeOffset.UtcNow challenge) then
                 this.TempData["Error"] <- "チャレンジが見つかりません。"
                 return this.RedirectToAction("Index") :> IActionResult
             else

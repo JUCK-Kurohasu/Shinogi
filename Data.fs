@@ -91,6 +91,12 @@ type CtfdDbContext(options: DbContextOptions<CtfdDbContext>) =
         builder.Entity<Flag>().HasIndex("ChallengeId", "ContentHash").IsUnique() |> ignore
         builder.Entity<Flag>().HasOne<Challenge>().WithMany().HasForeignKey("ChallengeId") |> ignore
         builder.Entity<Submission>().HasIndex("AccountId") |> ignore
+        // 同時提出の競合で正解が二重記録（二重得点）されないよう、正解はアカウント×チャレンジで1件に制限する
+        builder.Entity<Submission>()
+            .HasIndex("AccountId", "ChallengeId")
+            .IsUnique()
+            .HasFilter("\"IsCorrect\"")
+            .HasDatabaseName("IX_Submissions_AccountId_ChallengeId_Correct") |> ignore
         builder.Entity<Team>().HasIndex("Name").IsUnique() |> ignore
         builder.Entity<Team>().HasIndex("Token").IsUnique() |> ignore
         builder.Entity<TeamMember>().Property(fun m -> m.Role).HasConversion(roleConverter) |> ignore
